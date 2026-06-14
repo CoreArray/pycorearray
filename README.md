@@ -1,6 +1,8 @@
 pygds: Python Interface to CoreArray Genomic Data Structure (GDS) Files
 ===
 
+[![CI](https://github.com/CoreArray/pygds/actions/workflows/ci.yml/badge.svg)](https://github.com/CoreArray/pygds/actions/workflows/ci.yml)
+
 ![GPLv3](http://www.gnu.org/graphics/gplv3-88x31.png)
 [GNU General Public License, GPLv3](http://www.gnu.org/copyleft/gpl.html) (2017)
 
