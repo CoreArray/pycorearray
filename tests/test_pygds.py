@@ -4,7 +4,9 @@ Run directly (``python tests/test_pygds.py``) or under pytest.
 Covers: open/read of the bundled example, create/write/read round-trips for
 all common numeric types and string data, every compressor (ZIP / LZMA / LZ4
 and their _RA variants), multi-dimensional arrays, sub-region writes, append,
-folders, attributes, setdim, exist and delete.
+folders, attributes, setdim, exist and delete, and the run-length encoded
+("rle.*"), sparse ("sp.*") and unsigned packed real ("packedreal*u") storage
+types.
 """
 
 import os
@@ -257,6 +259,130 @@ def test_moveto_copyto_assign_addfile():
 		r.index('payload').getfile(out)
 		with open(out, 'rb') as fh:
 			assert fh.read() == payload
+	finally:
+		f.close()
+
+
+def test_rle_types():
+	fn = os.path.join(tempfile.mkdtemp(), 'rle.gds')
+	# runs of one value, an arithmetic progression and a block of literals
+	lit = (np.arange(300, dtype=np.int64) ** 2) % 1000
+	mix = np.concatenate([np.full(500, 7), np.arange(10, 1010, 5), lit])
+	prog = np.arange(0, 1.0001, 0.01)
+	strs = ['A'] * 200 + ['s%d' % i for i in range(150)] + ['B'] * 100
+	cases = {
+		'u8':  ('rle.uint8',   (mix % 200).astype(np.uint8),  'RleUInt8'),
+		'i32': ('rle.int32',   mix.astype(np.int32),          'RleInt32'),
+		'i64': ('rle.int64',   mix.astype(np.int64) * 10**10, 'RleInt64'),
+		'f32': ('rle.float32', prog.astype(np.float32),       'RleReal32'),
+		'f64': ('rle.float64', prog,                          'RleReal64'),
+	}
+	# alternative storage names and the trait each should map to
+	aliases = {'rle.int': 'RleInt32', 'rle.float': 'RleReal32',
+		'rle.real': 'RleReal64', 'rle.double': 'RleReal64'}
+	f = pygds.gdsfile(); f.create(fn)
+	try:
+		r = f.root()
+		for nm, (st, v, _tr) in cases.items():
+			r.add(nm, v, storage=st)
+		r.add('str', strs, storage='rle.string')
+		r.index('i32').append(np.full(50, -3, dtype=np.int32))
+		for k, st in enumerate(aliases):
+			r.add('alias%d' % k, np.array([1, 1, 2], dtype=np.int32), storage=st)
+	finally:
+		f.close()
+
+	f = pygds.gdsfile(); f.open(fn)
+	try:
+		r = f.root()
+		cases['i32'] = (None, np.concatenate([cases['i32'][1],
+			np.full(50, -3, dtype=np.int32)]), 'RleInt32')
+		for nm, (_st, v, tr) in cases.items():
+			n = r.index(nm)
+			got = n.read()
+			assert got.dtype == v.dtype and np.array_equal(got, v), nm
+			assert n.description()['trait'] == tr, (nm, n.description()['trait'])
+		# random access across run / progression / literal boundaries
+		i32 = cases['i32'][1]
+		got = r.index('i32').read(start=[495], count=[300])
+		assert np.array_equal(got, i32[495:795])
+		# an arithmetic progression is stored compactly
+		assert r.index('f64').description()['size'] < 0.05 * prog.nbytes
+		assert list(r.index('str').read()) == strs
+		assert r.index('str').description()['trait'] == 'RleStr8'
+		for k, st in enumerate(aliases):
+			assert r.index('alias%d' % k).description()['trait'] == aliases[st], st
+	finally:
+		f.close()
+
+
+def test_sparse_types():
+	fn = os.path.join(tempfile.mkdtemp(), 'sp.gds')
+	v = np.zeros(1000)
+	v[[3, 77, 500, 999]] = [1, -2, 3, 4]
+	cases = {
+		'sp.int8': np.int8, 'sp.int16': np.int16, 'sp.int32': np.int32,
+		'sp.int64': np.int64, 'sp.uint8': np.uint8, 'sp.uint16': np.uint16,
+		'sp.uint32': np.uint32, 'sp.uint64': np.uint64,
+		'sp.real32': np.float32, 'sp.real64': np.float64,
+	}
+	mat = np.zeros((4, 6), dtype=np.int32)
+	mat[1, 2] = 5
+	mat[3, 5] = -9
+	f = pygds.gdsfile(); f.create(fn)
+	try:
+		r = f.root()
+		for st, dt in cases.items():
+			x = np.abs(v) if np.dtype(dt).kind == 'u' else v
+			r.add(st, x.astype(dt), storage=st)
+		r.add('sp.int', np.array([0, 2, 0], dtype=np.int32), storage='sp.int')
+		r.add('sp.real', np.array([0, 0.5, 0]), storage='sp.real')
+		r.add('mat', mat, storage='sp.int32')
+		n = r.add('grow', np.array([0, 0, 3, 0], dtype=np.int16), storage='sp.int16')
+		n.append(np.array([0, 4], dtype=np.int16))
+		r.add('dense', np.arange(3, dtype=np.int32))
+	finally:
+		f.close()
+
+	f = pygds.gdsfile(); f.open(fn)
+	try:
+		r = f.root()
+		for st, dt in cases.items():
+			x = (np.abs(v) if np.dtype(dt).kind == 'u' else v).astype(dt)
+			n = r.index(st)
+			got = n.read()
+			assert n.is_sparse() and np.array_equal(got, x), st
+		assert r.index('sp.int').description()['trait'] == 'SparseInt32'
+		assert r.index('sp.real').description()['trait'] == 'SparseReal64'
+		got = r.index('mat').read()
+		assert got.shape == (4, 6) and np.array_equal(got, mat)
+		assert list(r.index('grow').read()) == [0, 0, 3, 0, 0, 4]
+		assert not r.index('dense').is_sparse()
+	finally:
+		f.close()
+
+
+def test_packedreal_unsigned():
+	fn = os.path.join(tempfile.mkdtemp(), 'pr.gds')
+	v = np.array([0.0, 0.25, 0.5, 1.0, 1.5])
+	scale = 0.01
+	traits = {'packedreal8u': 'PackedReal8U', 'packedreal16u': 'PackedReal16U',
+		'packedreal24u': 'PackedReal24U', 'packedreal32u': 'PackedReal32U'}
+	f = pygds.gdsfile(); f.create(fn)
+	try:
+		r = f.root()
+		for st in traits:
+			r.add(st, v, storage=st, offset=0.0, scale=scale)
+	finally:
+		f.close()
+
+	f = pygds.gdsfile(); f.open(fn)
+	try:
+		r = f.root()
+		for st, tr in traits.items():
+			n = r.index(st)
+			assert n.description()['trait'] == tr, st
+			assert np.allclose(n.read(), v, atol=scale / 2), st
 	finally:
 		f.close()
 

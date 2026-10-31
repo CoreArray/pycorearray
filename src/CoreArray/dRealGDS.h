@@ -262,16 +262,46 @@ namespace CoreArray
 	// Packed real number classes of GDS format
 	// =====================================================================
 
+	/// Offset and scale of a container of packed real numbers
+	/** Independent of the packing type, so that code holding a CdGDSObj
+	 *  pointer gets the conversion parameters with a single dynamic_cast.
+	**/
+	class COREARRAY_DLL_DEFAULT CdBasePackedReal
+	{
+	public:
+		CdBasePackedReal(): fOffset(0), fScale(1), fInvScale(1) { }
+		virtual ~CdBasePackedReal() { }
+
+		/// the offset of the packed real number
+		COREARRAY_INLINE C_Float64 Offset() const { return fOffset; }
+		/// the scale of the packed real number
+		COREARRAY_INLINE C_Float64 Scale() const { return fScale; }
+		/// 1 / Scale()
+		COREARRAY_INLINE C_Float64 InvScale() const { return fInvScale; }
+
+		/// set the offset
+		virtual void SetOffset(C_Float64 val) = 0;
+		/// set the scale
+		virtual void SetScale(C_Float64 val) = 0;
+
+	protected:
+		C_Float64 fOffset;    ///< the offset
+		C_Float64 fScale;     ///< the scale
+		C_Float64 fInvScale;  ///< 1 / fScale
+	};
+
+
 	/// Container of packed real number
 	/** \tparam REAL_TYPE    should be TReal8, TReal16, TReal24 or TReal32
 	**/
 	template<typename REAL_TYPE>
-		class COREARRAY_DLL_DEFAULT CdPackedReal: public CdArray<REAL_TYPE>
+		class COREARRAY_DLL_DEFAULT CdPackedReal:
+			public CdArray<REAL_TYPE>, public CdBasePackedReal
 	{
 	public:
 		typedef REAL_TYPE ElmType;
 
-		CdPackedReal(): CdArray<REAL_TYPE>()
+		CdPackedReal(): CdArray<REAL_TYPE>(), CdBasePackedReal()
 		{
 			fOffset = TdTraits<REAL_TYPE>::InitialOffset();
 			fScale  = TdTraits<REAL_TYPE>::InitialScale();
@@ -314,11 +344,7 @@ namespace CoreArray
 			CdAbstractArray::AppendIter(I, Count);
 		}
 
-		COREARRAY_INLINE C_Float64 Offset() const
-		{
-			return fOffset;
-		}
-		void SetOffset(C_Float64 val)
+		virtual void SetOffset(C_Float64 val)
 		{
 			if (val != fOffset)
 			{
@@ -328,11 +354,7 @@ namespace CoreArray
 			}
 		}
 
-		COREARRAY_INLINE C_Float64 Scale() const
-		{
-			return fScale;
-		}
-		void SetScale(C_Float64 val)
+		virtual void SetScale(C_Float64 val)
 		{
 			if (val != fScale)
 			{
@@ -340,11 +362,6 @@ namespace CoreArray
 				_ChangeLookup();
 				this->fChanged = true;
 			}
-		}
-
-		COREARRAY_INLINE C_Float64 InvScale() const
-		{
-			return fInvScale;
 		}
 
 		COREARRAY_INLINE const C_Float64 *LookupTable() const
@@ -372,9 +389,6 @@ namespace CoreArray
 			Writer["SCALE"]  << fScale;
 		}
 
-		C_Float64 fOffset;
-		C_Float64 fScale;
-		C_Float64 fInvScale;
 		C_Float64 _LookupTable[TdTraits<REAL_TYPE>::LookupTableSize];
 
 		void _ChangeLookup()
@@ -407,14 +421,7 @@ namespace CoreArray
 	/// get whether it is packed real or not
 	static inline bool IsPackedReal(CdGDSObj *Obj)
 	{
-		return dynamic_cast<CdPackedReal8*>(Obj) ||
-			dynamic_cast<CdPackedReal8U*>(Obj)   ||
-			dynamic_cast<CdPackedReal16*>(Obj)   ||
-			dynamic_cast<CdPackedReal16U*>(Obj)  ||
-			dynamic_cast<CdPackedReal24*>(Obj)   ||
-			dynamic_cast<CdPackedReal24U*>(Obj)  ||
-			dynamic_cast<CdPackedReal32*>(Obj)   ||
-			dynamic_cast<CdPackedReal32U*>(Obj);
+		return dynamic_cast<CdBasePackedReal*>(Obj) != NULL;
 	}
 
 
@@ -508,6 +515,22 @@ namespace CoreArray
 						if (sv16 & 0x2000) *p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[13]]);
 						if (sv16 & 0x4000) *p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[14]]);
 						if (sv16 & 0x8000) *p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[15]]);
+					}
+				}
+			#elif defined(COREARRAY_SIMD_NEON)
+				for (; Cnt >= 16; Cnt-=16, sel+=16, s+=16)
+				{
+					int st = vec_sel_blk16(sel);
+					if (st == 1)  // all selected
+					{
+						for (int k=0; k < 16; k++)
+							p[k] = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[k]]);
+						p += 16;
+					} else if (st == 2)  // at least one selected
+					{
+						for (int k=0; k < 16; k++)
+							if (sel[k])
+								*p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[k]]);
 					}
 				}
 			#endif
@@ -638,6 +661,22 @@ namespace CoreArray
 						if (sv16 & 0x2000) *p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[13]]);
 						if (sv16 & 0x4000) *p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[14]]);
 						if (sv16 & 0x8000) *p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[15]]);
+					}
+				}
+			#elif defined(COREARRAY_SIMD_NEON)
+				for (; Cnt >= 16; Cnt-=16, sel+=16, s+=16)
+				{
+					int st = vec_sel_blk16(sel);
+					if (st == 1)  // all selected
+					{
+						for (int k=0; k < 16; k++)
+							p[k] = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[k]]);
+						p += 16;
+					} else if (st == 2)  // at least one selected
+					{
+						for (int k=0; k < 16; k++)
+							if (sel[k])
+								*p++ = VAL_CONV_FROM_F64(MEM_TYPE, lookup[s[k]]);
 					}
 				}
 			#endif

@@ -111,16 +111,43 @@ namespace pygds
 			ClassMap["sbit32"] = TdTraits< C_Int32          >::StreamName();
 			ClassMap["sbit64"] = TdTraits< C_Int64          >::StreamName();
 
+			ClassMap["sp.int"]   = TdTraits< TSpInt32 >::StreamName();
+			ClassMap["sp.int8"]  = TdTraits< TSpInt8 >::StreamName();
+			ClassMap["sp.int16"] = TdTraits< TSpInt16 >::StreamName();
+			ClassMap["sp.int32"] = TdTraits< TSpInt32 >::StreamName();
+			ClassMap["sp.int64"] = TdTraits< TSpInt64 >::StreamName();
+			ClassMap["sp.uint8"]  = TdTraits< TSpUInt8 >::StreamName();
+			ClassMap["sp.uint16"] = TdTraits< TSpUInt16 >::StreamName();
+			ClassMap["sp.uint32"] = TdTraits< TSpUInt32 >::StreamName();
+			ClassMap["sp.uint64"] = TdTraits< TSpUInt64 >::StreamName();
+
+			ClassMap["rle.int"]   = TdTraits< TRleInt32 >::StreamName();
+			ClassMap["rle.uint8"] = TdTraits< TRleUInt8 >::StreamName();
+			ClassMap["rle.int32"] = TdTraits< TRleInt32 >::StreamName();
+			ClassMap["rle.int64"] = TdTraits< TRleInt64 >::StreamName();
+
 
 			// ==============================================================
 			// Real number
 
 			ClassMap["float32"] = TdTraits< C_Float32 >::StreamName();
 			ClassMap["float64"] = TdTraits< C_Float64 >::StreamName();
-			ClassMap["packedreal8"]  = TdTraits< TReal8  >::StreamName();
-			ClassMap["packedreal16"] = TdTraits< TReal16 >::StreamName();
-			ClassMap["packedreal24"] = TdTraits< TReal24 >::StreamName();
-			ClassMap["packedreal32"] = TdTraits< TReal32 >::StreamName();
+			ClassMap["packedreal8"]   = TdTraits< TReal8  >::StreamName();
+			ClassMap["packedreal8u"]  = TdTraits< TReal8u >::StreamName();
+			ClassMap["packedreal16"]  = TdTraits< TReal16 >::StreamName();
+			ClassMap["packedreal16u"] = TdTraits< TReal16u >::StreamName();
+			ClassMap["packedreal24"]  = TdTraits< TReal24 >::StreamName();
+			ClassMap["packedreal24u"] = TdTraits< TReal24u >::StreamName();
+			ClassMap["packedreal32"]  = TdTraits< TReal32 >::StreamName();
+			ClassMap["packedreal32u"] = TdTraits< TReal32u >::StreamName();
+			ClassMap["sp.real"]    = TdTraits< TSpReal64 >::StreamName();
+			ClassMap["sp.real32"]  = TdTraits< TSpReal32 >::StreamName();
+			ClassMap["sp.real64"]  = TdTraits< TSpReal64 >::StreamName();
+			ClassMap["rle.float"]   = TdTraits< TRleReal32 >::StreamName();
+			ClassMap["rle.float32"] = TdTraits< TRleReal32 >::StreamName();
+			ClassMap["rle.real"]    = TdTraits< TRleReal64 >::StreamName();
+			ClassMap["rle.double"]  = TdTraits< TRleReal64 >::StreamName();
+			ClassMap["rle.float64"] = TdTraits< TRleReal64 >::StreamName();
 
 
 			// ==============================================================
@@ -135,6 +162,7 @@ namespace pygds
 			ClassMap["fstring"  ] = TdTraits< FIXED_LEN<C_UTF8>  >::StreamName();
 			ClassMap["fstring16"] = TdTraits< FIXED_LEN<C_UTF16> >::StreamName();
 			ClassMap["fstring32"] = TdTraits< FIXED_LEN<C_UTF32> >::StreamName();
+			ClassMap["rle.string"] = TdTraits< TRleStr8 >::StreamName();
 
 
 			// ==============================================================
@@ -147,6 +175,7 @@ namespace pygds
 			ClassMap["vl_int"   ] = TdTraits< TVL_Int >::StreamName();
 			ClassMap["vl_uint"  ] = TdTraits< TVL_UInt >::StreamName();
 			ClassMap["float"    ] = TdTraits< C_Float32 >::StreamName();
+			ClassMap["single"   ] = TdTraits< C_Float32 >::StreamName();
 			ClassMap["numeric"  ] = TdTraits< C_Float64 >::StreamName();
 			ClassMap["double"   ] = TdTraits< C_Float64 >::StreamName();
 			ClassMap["character"] = TdTraits< VARIABLE_LEN<C_UTF8> >::StreamName();
@@ -1090,19 +1119,10 @@ PY_EXPORT PyObject* gdsnAddNode(PyObject *self, PyObject *args)
 		}
 
 		// packed-real offset / scale
-		if (CoreArray::IsFinite(offset) || CoreArray::IsFinite(scale))
+		if (CdBasePackedReal *o = dynamic_cast<CdBasePackedReal*>(rv_obj))
 		{
-			#define SET_PACKED(CLASS) \
-				else if (dynamic_cast<CLASS*>(rv_obj)) { \
-					CLASS *o = static_cast<CLASS*>(rv_obj); \
-					if (CoreArray::IsFinite(offset)) o->SetOffset(offset); \
-					if (CoreArray::IsFinite(scale))  o->SetScale(scale); }
-			if (false) {}
-			SET_PACKED(CdPackedReal8)  SET_PACKED(CdPackedReal8U)
-			SET_PACKED(CdPackedReal16) SET_PACKED(CdPackedReal16U)
-			SET_PACKED(CdPackedReal24) SET_PACKED(CdPackedReal24U)
-			SET_PACKED(CdPackedReal32) SET_PACKED(CdPackedReal32U)
-			#undef SET_PACKED
+			if (CoreArray::IsFinite(offset)) o->SetOffset(offset);
+			if (CoreArray::IsFinite(scale))  o->SetScale(scale);
 		}
 
 		// compression mode

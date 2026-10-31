@@ -29,6 +29,8 @@
 #include <memory>
 #include <algorithm>
 #include <typeinfo>
+#include <cstdio>
+#include <ctime>
 
 
 using namespace std;
@@ -37,6 +39,64 @@ using namespace CoreArray::_INTERNAL;
 
 
 static const char *ERR_SVTYPE = "Invalid SVType.";
+
+
+// =====================================================================
+// CdVarLenIndex: on-disk checkpoint table for variable-length elements
+// =====================================================================
+
+bool CdVarLenIndex::Lookup(C_Int64 Index, C_Int64 &OutIndex, SIZE64 &OutPos) const
+{
+	if (!fStream || (Index < STRIDE)) return false;
+	C_Int64 i = Index / STRIDE;
+	// checkpoints are written in order, so the stream size says how many
+	// exist -- while data is being written the table trails it, and a lookup
+	// past its end settles for the last one written
+	C_Int64 avail = fStream->GetSize() / GDS_POS_SIZE;
+	if (i > avail) i = avail;
+	if (i < 1) return false;
+	fStream->SetPosition((i-1)*GDS_POS_SIZE);
+	TdGDSPos pos;
+	BYTE_LE<CdStream>(fStream) >> pos;
+	OutIndex = i * STRIDE;
+	OutPos = pos;
+	return true;
+}
+
+void CdVarLenIndex::Store(C_Int64 Index, SIZE64 Pos)
+{
+	if (!fStream || (Index < STRIDE)) return;
+	SIZE64 at = (Index / STRIDE - 1) * GDS_POS_SIZE;
+	// grow first: CdBlockStream refuses a seek past its end
+	if (fStream->GetSize() < at + GDS_POS_SIZE)
+		fStream->SetSize(at + GDS_POS_SIZE);
+	fStream->SetPosition(at);
+	BYTE_LE<CdStream>(fStream) << TdGDSPos(Pos);
+}
+
+void CdVarLenIndex::Shift(C_Int64 Index, SIZE64 Delta)
+{
+	if (!fStream || (Delta == 0)) return;
+	C_Int64 avail = fStream->GetSize() / GDS_POS_SIZE;
+	// checkpoint i marks element i*STRIDE; it moved only if that element lies
+	// strictly after the one just rewritten
+	for (C_Int64 i = Index / STRIDE + 1; i <= avail; i++)
+	{
+		SIZE64 at = (i-1)*GDS_POS_SIZE;
+		fStream->SetPosition(at);
+		TdGDSPos pos;
+		BYTE_LE<CdStream>(fStream) >> pos;
+		fStream->SetPosition(at);
+		BYTE_LE<CdStream>(fStream) << TdGDSPos(SIZE64(pos) + Delta);
+	}
+}
+
+void CdVarLenIndex::Truncate(C_Int64 Count)
+{
+	if (!fStream) return;
+	SIZE64 want = (Count / STRIDE) * GDS_POS_SIZE;
+	if (fStream->GetSize() > want) fStream->SetSize(want);
+}
 
 
 // =====================================================================
@@ -1184,12 +1244,93 @@ void CdAllocArray::SetPackedMode(const char *Mode)
 
 			{
 				// automatically release the temporary stream
-				CdStream *TmpStream = new CdTempStream;
+				CdTempStream *TmpStream = new CdTempStream;
 				TdAutoRef<CdBufStream> Output(new CdBufStream(TmpStream));
 				if (fPipeInfo)
 					fPipeInfo->PushWritePipe(*Output);
 
-				fAllocator.CopyTo(*Output, 0, AllocSize(fTotalCount));
+				// Copy the data through the (de)compression pipe. Instead of a
+				// single CdAllocator::CopyTo() call, the copy is done chunk by
+				// chunk here so that the progress (percentage, bytes and an
+				// estimated time to completion) can be written to a text file
+				// (the temporary file name + ".progress.txt") next to the
+				// temporary file, letting the user monitor how much is left.
+				{
+					const SIZE64 TotalSize = AllocSize(fTotalCount);
+
+					// the GDS file name and the full node name go into the
+					// progress file too, so that the user can tell which
+					// array is being recompressed; CdGDSObj::Name() throws
+					// when the object is not in a folder, hence the guard
+					string GDSName, NodeName;
+					try {
+						CdGDSFile *File = GDSFile();
+						if (File) GDSName = File->FileName();
+						NodeName = FullName();
+					} catch (...) {
+						// no name available, the progress lines stay empty
+					}
+
+					// RAII helper: writes the progress file, and removes it in
+					// the destructor -- on both normal completion and if an
+					// exception is thrown midway through the copy loop
+					struct TProgress
+					{
+						string FileName;  // the progress file itself
+						string GDSName, NodeName;
+						time_t Start;
+						int LastPercent;
+						TProgress(const string &fn, const string &gds,
+							const string &node):
+							FileName(fn), GDSName(gds), NodeName(node),
+							Start(time(NULL)), LastPercent(-1) {}
+						~TProgress() { remove(FileName.c_str()); }
+						void Update(SIZE64 Done, SIZE64 Total)
+						{
+							// only rewrite when the integer percent changes, so
+							// at most ~101 tiny writes happen for a whole array
+							int Percent = (Total > 0) ?
+								(int)(100.0 * Done / Total) : 100;
+							if (Percent == LastPercent) return;
+							LastPercent = Percent;
+							FILE *F = fopen(FileName.c_str(), "w");
+							if (!F) return;
+							// estimate the remaining time from the average rate
+							char eta[64];
+							double Elapsed = difftime(time(NULL), Start);
+							if ((Done > 0) && (Done < Total) && (Elapsed > 0))
+							{
+								long r = (long)(Elapsed *
+									(double)(Total - Done) / Done + 0.5);
+								snprintf(eta, sizeof(eta), "%ld:%02ld:%02ld",
+									r/3600, (r/60)%60, r%60);
+							} else
+								snprintf(eta, sizeof(eta), "--:--:--");
+							fprintf(F, "File: %s\nNode: %s\n"
+								"%d%%, %lld/%lld bytes, ETA %s\n",
+								GDSName.c_str(), NodeName.c_str(),
+								Percent, (long long)Done, (long long)Total, eta);
+							fclose(F);
+						}
+					} Progress(TmpStream->FileName() + ".progress.txt",
+						GDSName, NodeName);
+
+					C_UInt8 Buffer[COREARRAY_STREAM_BUFFER];
+					SIZE64 Done = 0, Count = TotalSize;
+					fAllocator.SetPosition(0);
+					Progress.Update(0, TotalSize);
+					while (Count > 0)
+					{
+						ssize_t N = (Count >= (SIZE64)sizeof(Buffer)) ?
+							(ssize_t)sizeof(Buffer) : (ssize_t)Count;
+						fAllocator.ReadData(Buffer, N);
+						Output->WriteData(Buffer, N);
+						Count -= N; Done += N;
+						Progress.Update(Done, TotalSize);
+					}
+					// the 'Progress' destructor removes the progress file here
+				}
+
 				Output.get()->FlushWrite();
 				if (fPipeInfo)
 				{

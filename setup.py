@@ -43,6 +43,7 @@ corearray_fnlst = [ os.path.join('src', 'CoreArray', fn) for fn in [
 	'dParallel_Ext.c',
 	'dPlatform.cpp',
 	'dRealGDS.cpp',
+	'dRleGDS.cpp',
 	'dSerial.cpp',
 	'dSparse.cpp',
 	'dStrGDS.cpp',

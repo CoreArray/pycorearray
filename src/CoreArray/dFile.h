@@ -168,11 +168,21 @@ namespace CoreArray
 
 		/// synchronize, save data to disk
 		virtual void Synchronize();
+		/// give every stream of this object a block in the file if it has
+		/// none yet; called when the file is synchronized or the object is
+		/// unloaded, while the object is still fully constructed
+		void EnsureOwnBlocks();
 
 		/// get a list of CdBlockStream owned by this object, except fGDSStream
 		virtual void GetOwnBlockStream(vector<const CdBlockStream*> &Out) const;
 		/// get a list of CdStream owned by this object, except fGDSStream
 		virtual void GetOwnBlockStream(vector<CdStream*> &Out);
+
+		/// the subset of GetOwnBlockStream() that holds offset indices
+		/** Lets a caller tell an index apart from the data it indexes without
+		 *  having to know which container types keep one. A container may keep
+		 *  more than one, so this reports a list rather than a single stream. **/
+		virtual void GetIndexStream(vector<const CdBlockStream*> &Out) const;
 
 		/// get the GDS file
 		CdGDSFile *GDSFile();

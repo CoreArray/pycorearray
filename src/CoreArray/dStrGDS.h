@@ -39,6 +39,8 @@
 
 #include "dStruct.h"
 
+#include <typeinfo>
+
 
 namespace CoreArray
 {
@@ -368,6 +370,27 @@ namespace CoreArray
 			this->_ActualPosition = 0;
 			this->_CurrentIndex = 0;
 			this->_TotalSize = 0;
+			this->fIndexingID = 0;
+		}
+
+		/// get a list of CdBlockStream owned by this object, except fGDSStream
+		virtual void GetOwnBlockStream(vector<const CdBlockStream*> &Out) const
+		{
+			CdArray< C_STRING<TYPE> >::GetOwnBlockStream(Out);
+			if (fPersistIndex.Stream()) Out.push_back(fPersistIndex.Stream());
+		}
+
+		/// get a list of CdStream owned by this object, except fGDSStream
+		virtual void GetOwnBlockStream(vector<CdStream*> &Out)
+		{
+			CdArray< C_STRING<TYPE> >::GetOwnBlockStream(Out);
+			if (fPersistIndex.Stream()) Out.push_back(fPersistIndex.Stream());
+		}
+
+		virtual void GetIndexStream(vector<const CdBlockStream*> &Out) const
+		{
+			Out.clear();
+			if (fPersistIndex.Stream()) Out.push_back(fPersistIndex.Stream());
 		}
 
         virtual CdGDSObj *NewObject()
@@ -383,6 +406,95 @@ namespace CoreArray
 				throw ErrArray("The current version does not support this function.");
 		}
 
+		/// append Count elements from an iterator
+		/** If the source is a container of exactly the same type, the on-disk
+		 *  encoding of the two is identical, so the elements can be appended as
+		 *  a raw byte block instead of being decoded and re-encoded one string
+		 *  at a time. Otherwise fall back to the element-wise implementation.
+		**/
+		virtual void AppendIter(CdIterator &I, C_Int64 Count)
+		{
+			if ((Count > 0) && (typeid(*this) == typeid(*I.Handler)))
+			{
+				CdCString<TYPE> *Src = static_cast< CdCString<TYPE>* >(I.Handler);
+				CdBufStream *DstBuf = this->fAllocator.BufStream();
+				C_Int64 Idx = I.Ptr / sizeof(TYPE), IdxEnd = Idx + Count;
+				if ((Src != this) && DstBuf && Src->fAllocator.BufStream() &&
+					(Idx >= 0) && (IdxEnd <= Src->fTotalCount))
+				{
+					// the byte range [pS, pE) holding the source elements
+					Src->_Find_Position(Idx);
+					SIZE64 pS = Src->_ActualPosition, pE;
+					if (IdxEnd < Src->fTotalCount)
+					{
+						Src->_Find_Position(IdxEnd);
+						pE = Src->_ActualPosition;
+					} else
+						pE = Src->_TotalSize;
+
+					// copy the block to the end of this container
+					this->_SetLargeBuffer();
+					DstBuf->SetPosition(this->_TotalSize);
+					Src->fAllocator.CopyTo(*DstBuf, pS, pE - pS);
+
+					// Carry the checkpoints over. Appended element
+					// fTotalCount+k is source element Idx+k, and the two lie a
+					// constant Delta apart in their streams, so each checkpoint
+					// is just a source offset plus Delta. Asking the source for
+					// those offsets reuses its own index: when the two
+					// containers share the stride alignment every answer is an
+					// O(1) lookup, and otherwise it degrades to one forward
+					// walk of the copied range rather than a second parse.
+					if (fPersistIndex.Stream())
+					{
+						const C_Int64 SD = CdVarLenIndex::STRIDE;
+						SIZE64 Delta = this->_TotalSize - pS;
+						C_Int64 base = this->fTotalCount;
+						for (C_Int64 t = (base/SD + 1) * SD; t <= base + Count;
+							t += SD)
+						{
+							C_Int64 si = Idx + (t - base);
+							if (si < Src->fTotalCount)
+							{
+								Src->_Find_Position(si);
+								fPersistIndex.Store(t,
+									Src->_ActualPosition + Delta);
+							} else {
+								// one past the copied range: its offset is the
+								// end of the block, not a locatable element
+								fPersistIndex.Store(t, pE + Delta);
+							}
+						}
+						this->fNeedUpdate = true;
+					}
+
+					// CopyTo leaves the source stream at the end of the block;
+					// _Find_Position only re-seeks when the index moves, so the
+					// source cursor has to be left consistent with it here
+					Src->_ActualPosition = pE;
+					Src->_CurrentIndex = IdxEnd;
+					Src->fAllocator.SetPosition(pE);
+
+					this->_TotalSize += (pE - pS);
+					this->_ActualPosition = this->_TotalSize;
+					I.Ptr += Count * sizeof(TYPE);
+
+					// update the total count and the first dimension
+					CdAllocArray::TDimItem &R = this->fDimension.front();
+					this->fTotalCount += Count;
+					if (this->fTotalCount >= R.DimElmCnt*(R.DimLen+1))
+					{
+						R.DimLen = this->fTotalCount / R.DimElmCnt;
+						this->_SetFlushEvent();
+						this->fNeedUpdate = true;
+					}
+					this->_CurrentIndex = this->fTotalCount;
+					fIndexing.Reset(this->fTotalCount);
+					return;
+				}
+			}
+			CdAllocArray::AppendIter(I, Count);
+		}
 
 	protected:
 		/// indexing object
@@ -405,6 +517,10 @@ namespace CoreArray
 			{
 				_Find_Position(I.Ptr);
 				this->_TotalSize = this->_ActualPosition;
+				// the data past I.Ptr is going away; the checkpoints beyond it
+				// would otherwise still be counted by the stream size
+				fPersistIndex.Truncate(I.Ptr);
+				this->fNeedUpdate = true;
 			}
 		}
 
@@ -437,6 +553,8 @@ namespace CoreArray
 			fIndexing.Reset(this->fTotalCount);
 			fIndexing.Initialize();
 
+			fPersistIndex.Clear();
+
 			if (this->fGDSStream)
 			{
 				if (this->fPipeInfo)
@@ -446,12 +564,40 @@ namespace CoreArray
 					if (this->fAllocator.BufStream())
 						this->_TotalSize = this->fAllocator.BufStream()->GetSize();
 				}
+				// files written before the checkpoint table existed have no
+				// such property, so it has to be optional here
+				if (Reader.HaveProperty(CdVarLenIndex::VarName()))
+				{
+					Reader[CdVarLenIndex::VarName()] >> fIndexingID;
+					fPersistIndex.Attach(
+						this->fGDSStream->Collection()[fIndexingID]);
+				}
+			}
+		}
+
+		virtual void Saving(CdWriter &Writer)
+		{
+			CdAllocArray::Saving(Writer);
+			if (this->fGDSStream)
+			{
+				if (!fPersistIndex.Stream())
+				{
+					fPersistIndex.Attach(
+						this->fGDSStream->Collection().NewBlockStream());
+				}
+				fIndexingID = fPersistIndex.Stream()->ID();
+				Writer[CdVarLenIndex::VarName()] << fIndexingID;
 			}
 		}
 
 		SIZE64 _ActualPosition;
 		C_Int64 _CurrentIndex;
 		SIZE64 _TotalSize;
+
+		/// on-disk checkpoint table, complete as soon as the data is written
+		CdVarLenIndex fPersistIndex;
+		/// block ID of the on-disk checkpoint table
+		TdGDSBlockID fIndexingID;
 
 		COREARRAY_INLINE TType _ReadString()
 		{
@@ -500,6 +646,9 @@ namespace CoreArray
 					this->_ActualPosition + str_size,
 					this->_TotalSize - this->_ActualPosition - old_len);
 				this->_TotalSize += (str_size - old_len);
+				// everything after this element just moved by a constant
+				fPersistIndex.Shift(this->_CurrentIndex, str_size - old_len);
+				this->fNeedUpdate = true;
 			}
 
 			BYTE_LE<CdAllocator> ss(this->fAllocator);
@@ -523,6 +672,13 @@ namespace CoreArray
 
 			this->_ActualPosition = this->_TotalSize = ss.Position();
 			this->_CurrentIndex ++;
+			// the new element ends where the next one starts, so once the
+			// count reaches a multiple of STRIDE this is that element's offset
+			if (!(this->_CurrentIndex % CdVarLenIndex::STRIDE))
+			{
+				fPersistIndex.Store(this->_CurrentIndex, this->_TotalSize);
+				this->fNeedUpdate = true;
+			}
 			fIndexing.Reset(this->_CurrentIndex);
 		}
 
@@ -531,6 +687,19 @@ namespace CoreArray
 			if (Index != this->_CurrentIndex)
 			{
 				fIndexing.Set(Index, this->_CurrentIndex, this->_ActualPosition);
+				// the on-disk table can start closer than either the cursor or
+				// the in-memory index -- notably just after the file is opened,
+				// when the latter holds nothing but element zero
+				C_Int64 pi; SIZE64 pp;
+				if (fPersistIndex.Lookup(Index, pi, pp))
+				{
+					if (pi > this->_CurrentIndex)
+					{
+						this->_CurrentIndex = pi;
+						this->_ActualPosition = pp;
+						fIndexing.Reposition(pi);
+					}
+				}
 				BYTE_LE<CdAllocator> ss(this->fAllocator);
 				ss.SetPosition(this->_ActualPosition);
 				while (this->_CurrentIndex < Index) _SkipString();
@@ -587,6 +756,13 @@ namespace CoreArray
 			SIZE64 Idx = I.Ptr / sizeof(TYPE);
 			if (Idx < IT->fTotalCount)
 				IT->_Find_Position(Idx);
+			else {
+				// appending: _AppendString assigns _ActualPosition absolutely but
+				// only increments _CurrentIndex, so the cursor has to start at the
+				// end of the data or both it and fIndexing's count end up short
+				IT->_ActualPosition = IT->_TotalSize;
+				IT->_CurrentIndex   = IT->fTotalCount;
+			}
 			for (; n > 0; n--)
 			{
 				if (Idx < IT->fTotalCount)
@@ -684,6 +860,27 @@ namespace CoreArray
 			this->_ActualPosition = 0;
 			this->_CurrentIndex = 0;
 			this->_TotalSize = 0;
+			this->fIndexingID = 0;
+		}
+
+		/// get a list of CdBlockStream owned by this object, except fGDSStream
+		virtual void GetOwnBlockStream(vector<const CdBlockStream*> &Out) const
+		{
+			CdArray< VARIABLE_LEN<TYPE> >::GetOwnBlockStream(Out);
+			if (fPersistIndex.Stream()) Out.push_back(fPersistIndex.Stream());
+		}
+
+		/// get a list of CdStream owned by this object, except fGDSStream
+		virtual void GetOwnBlockStream(vector<CdStream*> &Out)
+		{
+			CdArray< VARIABLE_LEN<TYPE> >::GetOwnBlockStream(Out);
+			if (fPersistIndex.Stream()) Out.push_back(fPersistIndex.Stream());
+		}
+
+		virtual void GetIndexStream(vector<const CdBlockStream*> &Out) const
+		{
+			Out.clear();
+			if (fPersistIndex.Stream()) Out.push_back(fPersistIndex.Stream());
 		}
 
         virtual CdGDSObj *NewObject()
@@ -697,6 +894,96 @@ namespace CoreArray
 			CdAllocArray::TDimItem &pDim = this->fDimension[I];
 			if (pDim.DimLen != Value)
 				throw ErrArray("The current version does not support this function.");
+		}
+
+		/// append Count elements from an iterator
+		/** If the source is a container of exactly the same type, the on-disk
+		 *  encoding of the two is identical, so the elements can be appended as
+		 *  a raw byte block instead of being decoded and re-encoded one string
+		 *  at a time. Otherwise fall back to the element-wise implementation.
+		**/
+		virtual void AppendIter(CdIterator &I, C_Int64 Count)
+		{
+			if ((Count > 0) && (typeid(*this) == typeid(*I.Handler)))
+			{
+				CdString<TYPE> *Src = static_cast< CdString<TYPE>* >(I.Handler);
+				CdBufStream *DstBuf = this->fAllocator.BufStream();
+				C_Int64 Idx = I.Ptr / sizeof(TYPE), IdxEnd = Idx + Count;
+				if ((Src != this) && DstBuf && Src->fAllocator.BufStream() &&
+					(Idx >= 0) && (IdxEnd <= Src->fTotalCount))
+				{
+					// the byte range [pS, pE) holding the source elements
+					Src->_Find_Position(Idx);
+					SIZE64 pS = Src->_ActualPosition, pE;
+					if (IdxEnd < Src->fTotalCount)
+					{
+						Src->_Find_Position(IdxEnd);
+						pE = Src->_ActualPosition;
+					} else
+						pE = Src->_TotalSize;
+
+					// copy the block to the end of this container
+					this->_SetLargeBuffer();
+					DstBuf->SetPosition(this->_TotalSize);
+					Src->fAllocator.CopyTo(*DstBuf, pS, pE - pS);
+
+					// Carry the checkpoints over. Appended element
+					// fTotalCount+k is source element Idx+k, and the two lie a
+					// constant Delta apart in their streams, so each checkpoint
+					// is just a source offset plus Delta. Asking the source for
+					// those offsets reuses its own index: when the two
+					// containers share the stride alignment every answer is an
+					// O(1) lookup, and otherwise it degrades to one forward
+					// walk of the copied range rather than a second parse.
+					if (fPersistIndex.Stream())
+					{
+						const C_Int64 SD = CdVarLenIndex::STRIDE;
+						SIZE64 Delta = this->_TotalSize - pS;
+						C_Int64 base = this->fTotalCount;
+						for (C_Int64 t = (base/SD + 1) * SD; t <= base + Count;
+							t += SD)
+						{
+							C_Int64 si = Idx + (t - base);
+							if (si < Src->fTotalCount)
+							{
+								Src->_Find_Position(si);
+								fPersistIndex.Store(t,
+									Src->_ActualPosition + Delta);
+							} else {
+								// one past the copied range: its offset is the
+								// end of the block, not a locatable element
+								fPersistIndex.Store(t, pE + Delta);
+							}
+						}
+						this->fNeedUpdate = true;
+					}
+
+					// CopyTo leaves the source stream at the end of the block;
+					// _Find_Position only re-seeks when the index moves, so the
+					// source cursor has to be left consistent with it here
+					Src->_ActualPosition = pE;
+					Src->_CurrentIndex = IdxEnd;
+					Src->fAllocator.SetPosition(pE);
+
+					this->_TotalSize += (pE - pS);
+					this->_ActualPosition = this->_TotalSize;
+					I.Ptr += Count * sizeof(TYPE);
+
+					// update the total count and the first dimension
+					CdAllocArray::TDimItem &R = this->fDimension.front();
+					this->fTotalCount += Count;
+					if (this->fTotalCount >= R.DimElmCnt*(R.DimLen+1))
+					{
+						R.DimLen = this->fTotalCount / R.DimElmCnt;
+						this->_SetFlushEvent();
+						this->fNeedUpdate = true;
+					}
+					this->_CurrentIndex = this->fTotalCount;
+					fIndexing.Reset(this->fTotalCount);
+					return;
+				}
+			}
+			CdAllocArray::AppendIter(I, Count);
 		}
 
 	protected:
@@ -720,6 +1007,10 @@ namespace CoreArray
 			{
 				_Find_Position(I.Ptr);
 				this->_TotalSize = this->_ActualPosition;
+				// the data past I.Ptr is going away; the checkpoints beyond it
+				// would otherwise still be counted by the stream size
+				fPersistIndex.Truncate(I.Ptr);
+				this->fNeedUpdate = true;
 			}
 		}
 
@@ -752,6 +1043,8 @@ namespace CoreArray
 			fIndexing.Reset(this->fTotalCount);
 			fIndexing.Initialize();
 
+			fPersistIndex.Clear();
+
 			if (this->fGDSStream)
 			{
 				if (this->fPipeInfo)
@@ -761,12 +1054,40 @@ namespace CoreArray
 					if (this->fAllocator.BufStream())
 						this->_TotalSize = this->fAllocator.BufStream()->GetSize();
 				}
+				// files written before the checkpoint table existed have no
+				// such property, so it has to be optional here
+				if (Reader.HaveProperty(CdVarLenIndex::VarName()))
+				{
+					Reader[CdVarLenIndex::VarName()] >> fIndexingID;
+					fPersistIndex.Attach(
+						this->fGDSStream->Collection()[fIndexingID]);
+				}
+			}
+		}
+
+		virtual void Saving(CdWriter &Writer)
+		{
+			CdAllocArray::Saving(Writer);
+			if (this->fGDSStream)
+			{
+				if (!fPersistIndex.Stream())
+				{
+					fPersistIndex.Attach(
+						this->fGDSStream->Collection().NewBlockStream());
+				}
+				fIndexingID = fPersistIndex.Stream()->ID();
+				Writer[CdVarLenIndex::VarName()] << fIndexingID;
 			}
 		}
 
 		SIZE64 _ActualPosition;
 		C_Int64 _CurrentIndex;
 		SIZE64 _TotalSize;
+
+		/// on-disk checkpoint table, complete as soon as the data is written
+		CdVarLenIndex fPersistIndex;
+		/// block ID of the on-disk checkpoint table
+		TdGDSBlockID fIndexingID;
 
 		COREARRAY_INLINE TType _ReadString()
 		{
@@ -844,6 +1165,9 @@ namespace CoreArray
 					this->_ActualPosition + len_byte,
 					this->_TotalSize - this->_ActualPosition - old_len);
 				this->_TotalSize += (len_byte - old_len);
+				// everything after this element just moved by a constant
+				fPersistIndex.Shift(this->_CurrentIndex, len_byte - old_len);
+				this->fNeedUpdate = true;
 			}
 
 			// write the length
@@ -889,6 +1213,13 @@ namespace CoreArray
 			this->_TotalSize += len_byte;
 			this->_ActualPosition = this->_TotalSize;
 			this->_CurrentIndex ++;
+			// the new element ends where the next one starts, so once the
+			// count reaches a multiple of STRIDE this is that element's offset
+			if (!(this->_CurrentIndex % CdVarLenIndex::STRIDE))
+			{
+				fPersistIndex.Store(this->_CurrentIndex, this->_TotalSize);
+				this->fNeedUpdate = true;
+			}
 			fIndexing.Reset(this->_CurrentIndex);
 		}
 
@@ -897,6 +1228,19 @@ namespace CoreArray
 			if (Index != this->_CurrentIndex)
 			{
 				fIndexing.Set(Index, this->_CurrentIndex, this->_ActualPosition);
+				// the on-disk table can start closer than either the cursor or
+				// the in-memory index -- notably just after the file is opened,
+				// when the latter holds nothing but element zero
+				C_Int64 pi; SIZE64 pp;
+				if (fPersistIndex.Lookup(Index, pi, pp))
+				{
+					if (pi > this->_CurrentIndex)
+					{
+						this->_CurrentIndex = pi;
+						this->_ActualPosition = pp;
+						fIndexing.Reposition(pi);
+					}
+				}
 				this->fAllocator.SetPosition(this->_ActualPosition);
 				while (this->_CurrentIndex < Index) _SkipString();
 			}
@@ -952,6 +1296,13 @@ namespace CoreArray
 			SIZE64 Idx = I.Ptr / sizeof(TYPE);
 			if (Idx < IT->fTotalCount)
 				IT->_Find_Position(Idx);
+			else {
+				// appending: _AppendString assigns _ActualPosition absolutely but
+				// only increments _CurrentIndex, so the cursor has to start at the
+				// end of the data or both it and fIndexing's count end up short
+				IT->_ActualPosition = IT->_TotalSize;
+				IT->_CurrentIndex   = IT->fTotalCount;
+			}
 
 			for (; n > 0; n--)
 			{
