@@ -6,23 +6,23 @@
 // _/_/_/   _/_/_/  _/_/_/_/_/     _/     _/_/_/   _/_/
 // ===========================================================
 //
-// PyGDS.h: C interface to pygds dynamic library
+// PyGDS.h: C interface to pycorearray dynamic library
 //
 // Copyright (C) 2017    Xiuwen Zheng
 //
-// This file is part of pygds.
+// This file is part of pycorearray.
 //
-// pygds is free software: you can redistribute it and/or modify it
+// pycorearray is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License Version 3 as
 // published by the Free Software Foundation.
 //
-// pygds is distributed in the hope that it will be useful, but
+// pycorearray is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public
-// License along with pygds.
+// License along with pycorearray.
 // If not, see <http://www.gnu.org/licenses/>.
 
 
@@ -354,7 +354,7 @@ extern "C" {
 
 	// ==================================================================
 
-	/// export pygds C API pointer
+	/// export pycorearray C API pointer
 	extern void *PyGDS_API;
 
 	#ifndef COREARRAY_PYGDS_PACKAGE

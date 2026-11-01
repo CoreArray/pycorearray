@@ -3,7 +3,7 @@ import numpy as np
 # import os
 import os
 # import c library
-import pygds.ccall as cc
+import pycorearray.ccall as cc
 
 
 ## export version number
@@ -34,21 +34,21 @@ def cleanup_gds(filename, verbose=True):
 
 def get_include():
 	"""
-	Return the directory that contains the pygds \\*.h header files.
-	Extension modules that need to compile against pygds should use this
+	Return the directory that contains the pycorearray \\*.h header files.
+	Extension modules that need to compile against pycorearray should use this
 	function to locate the appropriate include directory.
 	Notes
 	-----
 	When using ``distutils``, for example in ``setup.py``.
 	::
-		import pygds as gds
+		import pycorearray as gds
 		...
 		Extension('pkg_name', ...
 			include_dirs=[ gds.get_include() ])
 		...
 	"""
-	import pygds
-	return os.path.join(os.path.dirname(pygds.__file__), 'include')
+	import pycorearray
+	return os.path.join(os.path.dirname(pycorearray.__file__), 'include')
 
 
 def get_example_path(filename=None):
@@ -69,8 +69,8 @@ def get_example_path(filename=None):
 	--------
 	>>> get_example_path('ceu_exon.gds')
 	"""
-	import pygds
-	s = os.path.dirname(pygds.__file__)
+	import pycorearray
+	s = os.path.dirname(pycorearray.__file__)
 	if filename is None:
 		return os.path.join(s, 'data')
 	else:

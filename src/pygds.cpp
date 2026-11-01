@@ -4,17 +4,17 @@
 //
 // Copyright (C) 2017-2026    Xiuwen Zheng
 //
-// pygds is free software: you can redistribute it and/or modify it
+// pycorearray is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License Version 3 as
 // published by the Free Software Foundation.
 //
-// pygds is distributed in the hope that it will be useful, but
+// pycorearray is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public
-// License along with pygds.
+// License along with pycorearray.
 // If not, see <http://www.gnu.org/licenses/>.
 
 
@@ -1760,7 +1760,7 @@ static PyMethodDef module_methods[] = {
 static struct PyModuleDef ModStruct =
 {
 	PyModuleDef_HEAD_INIT,
-	"pygds.ccall",  // name of module
+	"pycorearray.ccall",  // name of module
 	"C functions for data manipulation",  // module documentation
 	-1,  // size of per-interpreter state of the module, or -1 if the module keeps state in global variables
 	module_methods
@@ -1780,7 +1780,7 @@ PyMODINIT_FUNC initccall()
 #if PY_MAJOR_VERSION >= 3
 	mod = PyModule_Create(&ModStruct);
 #else
-	mod = Py_InitModule("pygds.ccall", module_methods);
+	mod = Py_InitModule("pycorearray.ccall", module_methods);
 #endif
 
 	if (mod)

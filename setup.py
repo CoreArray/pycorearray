@@ -110,9 +110,9 @@ for l in lzma_lib:
 	extra_link_args += ['-Wl,-rpath,' + l]
 
 ext = Extension(
-	'pygds.ccall',
+	'pycorearray.ccall',
 	corearray_fnlst + zlib_fnlst + lz4_fnlst + pygds_fnlst,
-	include_dirs = [ 'pygds/include', 'src/CoreArray', numpy.get_include() ] + lzma_inc,
+	include_dirs = [ 'pycorearray/include', 'src/CoreArray', numpy.get_include() ] + lzma_inc,
 	library_dirs = lzma_lib,
 	define_macros = [
 		('USING_PYTHON', None),

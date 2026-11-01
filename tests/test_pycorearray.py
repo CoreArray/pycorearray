@@ -1,6 +1,6 @@
-"""Round-trip and read tests for pygds.
+"""Round-trip and read tests for pycorearray.
 
-Run directly (``python tests/test_pygds.py``) or under pytest.
+Run directly (``python tests/test_pycorearray.py``) or under pytest.
 Covers: open/read of the bundled example, create/write/read round-trips for
 all common numeric types and string data, every compressor (ZIP / LZMA / LZ4
 and their _RA variants), multi-dimensional arrays, sub-region writes, append,
@@ -14,14 +14,14 @@ import tempfile
 
 import numpy as np
 
-import pygds
+import pycorearray
 
 
 # ---------------------------------------------------------------------------
 
 def test_open_example():
-	f = pygds.gdsfile()
-	f.open(pygds.get_example_path('ceu_exon.gds'))
+	f = pycorearray.gdsfile()
+	f.open(pycorearray.get_example_path('ceu_exon.gds'))
 	try:
 		root = f.root()
 		names = root.ls()
@@ -51,7 +51,7 @@ def test_numeric_types():
 		'f32': (np.arange(20, dtype=np.float32) / 7),
 		'f64': np.linspace(-1, 1, 333),
 	}
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		for nm, v in cases.items():
@@ -59,7 +59,7 @@ def test_numeric_types():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		for nm, v in cases.items():
@@ -73,7 +73,7 @@ def test_compressors():
 	fn = os.path.join(tempfile.mkdtemp(), 'comp.gds')
 	data = np.tile(np.arange(2000, dtype=np.int32), 3)  # compressible
 	methods = ['', 'ZIP', 'ZIP_RA', 'LZMA', 'LZMA_RA', 'LZ4', 'LZ4_RA']
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		for m in methods:
@@ -81,7 +81,7 @@ def test_compressors():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		for m in methods:
@@ -94,7 +94,7 @@ def test_compressors():
 def test_multidim_and_subregion():
 	fn = os.path.join(tempfile.mkdtemp(), 'md.gds')
 	a = np.arange(24, dtype=np.int32).reshape(2, 3, 4)
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		n = r.add('cube', a, compress='LZMA_RA')
@@ -104,7 +104,7 @@ def test_multidim_and_subregion():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		cube = r.index('cube').read()
@@ -117,7 +117,7 @@ def test_multidim_and_subregion():
 
 def test_strings_and_append():
 	fn = os.path.join(tempfile.mkdtemp(), 'str.gds')
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		r.add('s', ['alpha', 'beta', 'gamma'], compress='LZ4_RA')
@@ -127,7 +127,7 @@ def test_strings_and_append():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		assert list(r.index('s').read()) == ['alpha', 'beta', 'gamma']
@@ -138,7 +138,7 @@ def test_strings_and_append():
 
 def test_folders_attrs_exist_delete():
 	fn = os.path.join(tempfile.mkdtemp(), 'tree.gds')
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		g = r.addfolder('grp')
@@ -155,7 +155,7 @@ def test_folders_attrs_exist_delete():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		assert r.exist('grp/x') and not r.exist('grp/zzz')
@@ -171,14 +171,14 @@ def test_folders_attrs_exist_delete():
 def test_apply():
 	fn = os.path.join(tempfile.mkdtemp(), 'apply.gds')
 	mat = np.arange(24, dtype=np.int32).reshape(4, 6)  # 4 rows x 6 cols
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		f.root().add('m', mat)
 		f.root().add('v', np.arange(4, dtype=np.int32))
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		m = f.root().index('m')
 		# row sums (iterate axis 0): each slice is a length-6 row
@@ -192,7 +192,7 @@ def test_apply():
 		assert u.size == mat.size
 		# multi-node lock-step apply over matching margins
 		v = f.root().index('v')
-		out = pygds.apply_gdsn([m, v], [0, 0],
+		out = pycorearray.apply_gdsn([m, v], [0, 0],
 			lambda row, sv: int(row.sum()) + int(sv), as_is='list')
 		assert out == [int(mat[i].sum()) + i for i in range(4)], out
 	finally:
@@ -203,13 +203,13 @@ def test_digest_summarize_diagnosis():
 	import hashlib
 	fn = os.path.join(tempfile.mkdtemp(), 'dig.gds')
 	v = np.arange(1000, dtype=np.int32)
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		f.root().add('v', v, compress='LZMA_RA')
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		n = f.root().index('v')
 		md5 = n.digest('md5')
@@ -233,7 +233,7 @@ def test_moveto_copyto_assign_addfile():
 	with open(ext, 'wb') as fh:
 		fh.write(payload)
 
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		r.add('a', np.arange(3, dtype=np.int32))
@@ -250,7 +250,7 @@ def test_moveto_copyto_assign_addfile():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		assert list(r.index('a_copy').read()) == [0, 1, 2]
@@ -280,7 +280,7 @@ def test_rle_types():
 	# alternative storage names and the trait each should map to
 	aliases = {'rle.int': 'RleInt32', 'rle.float': 'RleReal32',
 		'rle.real': 'RleReal64', 'rle.double': 'RleReal64'}
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		for nm, (st, v, _tr) in cases.items():
@@ -292,7 +292,7 @@ def test_rle_types():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		cases['i32'] = (None, np.concatenate([cases['i32'][1],
@@ -329,7 +329,7 @@ def test_sparse_types():
 	mat = np.zeros((4, 6), dtype=np.int32)
 	mat[1, 2] = 5
 	mat[3, 5] = -9
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		for st, dt in cases.items():
@@ -344,7 +344,7 @@ def test_sparse_types():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		for st, dt in cases.items():
@@ -368,7 +368,7 @@ def test_packedreal_unsigned():
 	scale = 0.01
 	traits = {'packedreal8u': 'PackedReal8U', 'packedreal16u': 'PackedReal16U',
 		'packedreal24u': 'PackedReal24U', 'packedreal32u': 'PackedReal32U'}
-	f = pygds.gdsfile(); f.create(fn)
+	f = pycorearray.gdsfile(); f.create(fn)
 	try:
 		r = f.root()
 		for st in traits:
@@ -376,7 +376,7 @@ def test_packedreal_unsigned():
 	finally:
 		f.close()
 
-	f = pygds.gdsfile(); f.open(fn)
+	f = pycorearray.gdsfile(); f.open(fn)
 	try:
 		r = f.root()
 		for st, tr in traits.items():

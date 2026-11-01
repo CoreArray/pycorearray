@@ -6,23 +6,23 @@
 // _/_/_/   _/_/_/  _/_/_/_/_/     _/     _/_/_/   _/_/
 // ===========================================================
 //
-// PyGDS_CPP.h: C interface to pygds dynamic library + CPP classes
+// PyGDS_CPP.h: C interface to pycorearray dynamic library + CPP classes
 //
 // Copyright (C) 2017    Xiuwen Zheng
 //
 // This file is part of CoreArray.
 //
-// pygds is free software: you can redistribute it and/or modify it
+// pycorearray is free software: you can redistribute it and/or modify it
 // under the terms of the GNU General Public License Version 3 as
 // published by the Free Software Foundation.
 //
-// pygds is distributed in the hope that it will be useful, but
+// pycorearray is distributed in the hope that it will be useful, but
 // WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public
-// License along with pygds.
+// License along with pycorearray.
 // If not, see <http://www.gnu.org/licenses/>.
 
 
@@ -158,7 +158,7 @@ namespace CoreArray
 
 	#else  // COREARRAY_PYGDS_PACKAGE
 
-	/// error exception for the pygds package
+	/// error exception for the pycorearray package
 	class COREARRAY_DLL_EXPORT ErrGDSFmt: public ErrCoreArray
 	{
 	public:
