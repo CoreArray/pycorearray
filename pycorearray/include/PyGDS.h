@@ -379,6 +379,8 @@ extern "C" {
 
 	/// initialize GDS interface, return -1 with a Python exception if fails
 	extern int Init_GDS_Routines();
+	/// the same as Init_GDS_Routines(), named like numpy's import_array()
+	extern int import_pycorearray();
 
 	#endif  // COREARRAY_PYCOREARRAY_PACKAGE
 

@@ -747,6 +747,12 @@ int Init_GDS_Routines()
 	return 0;
 }
 
+/// the same as Init_GDS_Routines(), named like numpy's import_array()
+int import_pycorearray()
+{
+	return Init_GDS_Routines();
+}
+
 
 #ifdef __cplusplus
 }
