@@ -1,6 +1,6 @@
 // ===========================================================
 //
-// pygds.cpp: Python Interface to CoreArray Genomic Data Structure (GDS) Files
+// ccall.cpp: Python Interface to CoreArray Genomic Data Structure (GDS) Files
 //
 // Copyright (C) 2017-2026    Xiuwen Zheng
 //
@@ -18,7 +18,7 @@
 // If not, see <http://www.gnu.org/licenses/>.
 
 
-#define COREARRAY_PYGDS_PACKAGE
+#define COREARRAY_PYCOREARRAY_PACKAGE
 
 #include <PyGDS_CPP.h>
 #include <string>
@@ -29,7 +29,7 @@
 #define PY_EXPORT    static
 
 
-namespace pygds
+namespace pycorearray
 {
 	extern PdGDSFile PKG_GDS_Files[];
 	extern vector<PdGDSObj> PKG_GDSObj_List;
@@ -193,7 +193,7 @@ namespace pygds
 
 using namespace std;
 using namespace CoreArray;
-using namespace pygds;
+using namespace pycorearray;
 
 
 extern "C"
@@ -1696,7 +1696,7 @@ PY_EXPORT PyObject* gdsDiagnosis(PyObject *self, PyObject *args)
 // Register routines
 // ----------------------------------------------------------------------------
 
-extern COREARRAY_DLL_LOCAL bool pygds_init();
+extern COREARRAY_DLL_LOCAL bool pycorearray_init();
 
 static PyMethodDef module_methods[] = {
 	// file operations
@@ -1768,11 +1768,11 @@ static struct PyModuleDef ModStruct =
 
 PyMODINIT_FUNC PyInit_ccall()
 {
-	if (!pygds_init()) return NULL;
+	if (!pycorearray_init()) return NULL;
 #else
 PyMODINIT_FUNC initccall()
 {
-	pygds_init();
+	pycorearray_init();
 #endif
 
 	// create the module and add the functions

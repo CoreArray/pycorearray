@@ -66,7 +66,7 @@ namespace CoreArray
 
 
 	// [[ ********
-	#ifdef COREARRAY_PYGDS_PACKAGE
+	#ifdef COREARRAY_PYCOREARRAY_PACKAGE
 
 	/// catch block for CoreArray library
 	#define COREARRAY_CATCH    \
@@ -124,7 +124,7 @@ namespace CoreArray
 	// ==================================================================
 
 	// [[ ********
-	#ifndef COREARRAY_PYGDS_PACKAGE
+	#ifndef COREARRAY_PYCOREARRAY_PACKAGE
 
 	/// Error Macro
 	#define _COREARRAY_ERRMACRO_(x) { \
@@ -156,7 +156,7 @@ namespace CoreArray
 		}
 	};
 
-	#else  // COREARRAY_PYGDS_PACKAGE
+	#else  // COREARRAY_PYCOREARRAY_PACKAGE
 
 	/// error exception for the pycorearray package
 	class COREARRAY_DLL_EXPORT ErrGDSFmt: public ErrCoreArray
@@ -167,7 +167,7 @@ namespace CoreArray
 		ErrGDSFmt(const std::string &msg) { fMessage = msg; }
 	};
 
-	#endif  // COREARRAY_PYGDS_PACKAGE
+	#endif  // COREARRAY_PYCOREARRAY_PACKAGE
 	// ]] ********
 
 }

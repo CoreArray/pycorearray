@@ -18,13 +18,13 @@
 // If not, see <http://www.gnu.org/licenses/>.
 
 
-#define COREARRAY_PYGDS_PACKAGE
+#define COREARRAY_PYCOREARRAY_PACKAGE
 
 #include <PyGDS_CPP.h>
 #include <numpy/arrayobject.h>
 
 
-namespace pygds
+namespace pycorearray
 {
 	using namespace std;
 	using namespace CoreArray;
@@ -112,7 +112,7 @@ namespace pygds
 using namespace std;
 using namespace CoreArray;
 using namespace CoreArray::Parallel;
-using namespace pygds;
+using namespace pycorearray;
 
 
 extern "C"
@@ -907,7 +907,7 @@ static PyObject* _init_() { import_array(); return Py_None; }
 static void _init_() { import_array(); }
 #endif
 
-COREARRAY_DLL_LOCAL bool pygds_init()
+COREARRAY_DLL_LOCAL bool pycorearray_init()
 {
 	PyGDS_API = (void*)c_api;
 	// register CoreArray classes and objects

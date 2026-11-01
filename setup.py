@@ -70,9 +70,9 @@ lz4_fnlst = [ os.path.join('src', 'LZ4', fn) for fn in [
 	'lz4frame.c',
 	'xxhash.c' ] ]
 
-pygds_fnlst = [ os.path.join('src', fn) for fn in [
+pycorearray_fnlst = [ os.path.join('src', fn) for fn in [
 	'PyCoreArray.cpp',
-	'pygds.cpp' ] ]
+	'ccall.cpp' ] ]
 
 
 # ----------------------------------------------------------------------------
@@ -111,7 +111,7 @@ for l in lzma_lib:
 
 ext = Extension(
 	'pycorearray.ccall',
-	corearray_fnlst + zlib_fnlst + lz4_fnlst + pygds_fnlst,
+	corearray_fnlst + zlib_fnlst + lz4_fnlst + pycorearray_fnlst,
 	include_dirs = [ 'pycorearray/include', 'src/CoreArray', numpy.get_include() ] + lzma_inc,
 	library_dirs = lzma_lib,
 	define_macros = [

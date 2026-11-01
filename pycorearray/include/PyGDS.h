@@ -57,7 +57,7 @@
 	#       undef isalnum
 	#   endif
 	#endif
-#   ifdef COREARRAY_PYGDS_PACKAGE
+#   ifdef COREARRAY_PYCOREARRAY_PACKAGE
 #       include <CoreArray.h>
         using namespace CoreArray;
 #   endif
@@ -69,11 +69,11 @@ extern "C" {
 	// ==================================================================
 
 	/// Version of package pycorearray: v0.2
-	#define PYGDS_VERSION       0x000200
+	#define PYCOREARRAY_VERSION 0x000200
 
 
 	// [[ ********
-	#ifndef COREARRAY_PYGDS_PACKAGE
+	#ifndef COREARRAY_PYCOREARRAY_PACKAGE
 
 	// ====  the interface for CoreArray library  ====
 
@@ -113,7 +113,7 @@ extern "C" {
 	typedef struct CdIterator *PdIterator;
 
 
-	#endif  // COREARRAY_PYGDS_PACKAGE
+	#endif  // COREARRAY_PYCOREARRAY_PACKAGE
 	// ]] ********
 
 
@@ -357,12 +357,12 @@ extern "C" {
 	/// export pycorearray C API pointer
 	extern void *PyGDS_API;
 
-	#ifndef COREARRAY_PYGDS_PACKAGE
+	#ifndef COREARRAY_PYCOREARRAY_PACKAGE
 
 	/// initialize GDS interface, return -1 if fails
 	extern int Init_GDS_Routines();
 
-	#endif  // COREARRAY_PYGDS_PACKAGE
+	#endif  // COREARRAY_PYCOREARRAY_PACKAGE
 
 
 #ifdef __cplusplus
