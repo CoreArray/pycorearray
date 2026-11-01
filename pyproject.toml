@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=77", "numpy>=1.20"]
+# building against NumPy 2.x headers gives a binary that also runs on NumPy 1.x
+requires = ["setuptools>=77", "numpy>=2.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,20 +8,35 @@ name = "pycorearray"
 version = "0.2.0"
 description = "Python Interface to CoreArray Genomic Data Structure (GDS) Files"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 # pycorearray: GPL-3.0; bundled CoreArray: LGPL-3.0; LZ4/xxHash: BSD-2-Clause; zlib: Zlib
 license = "GPL-3.0-only AND LGPL-3.0-only AND BSD-2-Clause AND Zlib"
 license-files = ["LICENSE", "src/LZ4/LICENSE", "src/ZLIB/LICENSE"]
 authors = [
     { name = "Xiuwen Zheng", email = "zhengxwen@gmail.com" },
 ]
-dependencies = ["numpy"]
+keywords = ["GDS", "CoreArray", "gdsfmt", "genomics", "bioinformatics",
+    "array storage", "compression"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+# must match NPY_TARGET_VERSION in setup.py
+dependencies = ["numpy>=1.25"]
 
 [project.urls]
 Homepage = "https://github.com/CoreArray/pycorearray"
+Issues = "https://github.com/CoreArray/pycorearray/issues"
 
 [tool.setuptools]
-packages = ["pycorearray"]
+packages = ["pycorearray", "pycorearray.data", "pycorearray.include"]
 
 [tool.setuptools.package-data]
-pycorearray = ["include/*.h", "data/*.gds"]
+"pycorearray.data" = ["*.gds"]
+"pycorearray.include" = ["*.h"]

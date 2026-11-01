@@ -120,6 +120,8 @@ ext = Extension(
 		# XZ/LZMA via the system liblzma (external-lib mode); LZ4 bundled in src/LZ4
 		('COREARRAY_USE_LZMA_EXT', None),
 		('NPY_NO_DEPRECATED_API', 'NPY_1_7_API_VERSION'),
+		# oldest NumPy the binary runs on; keep in sync with pyproject.toml
+		('NPY_TARGET_VERSION', 'NPY_1_25_API_VERSION'),
 	],
 	libraries = [ 'lzma' ],
 	extra_compile_args = extra_compile_args,
