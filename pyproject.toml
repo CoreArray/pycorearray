@@ -15,7 +15,7 @@ authors = [
 dependencies = ["numpy"]
 
 [project.urls]
-Homepage = "http://github.com/CoreArray/pygds"
+Homepage = "https://github.com/CoreArray/pycorearray"
 
 [tool.setuptools]
 packages = ["pycorearray"]
