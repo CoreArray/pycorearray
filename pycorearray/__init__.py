@@ -559,7 +559,7 @@ class gdsnode:
 	# -------------------------------------------------------------------
 
 	def add(self, name, val=None, storage='', compress='', valdim=None,
-			closezip=True, replace=False, visible=True, check=True,
+			closezip=False, replace=False, visible=True, check=True,
 			maxlen=0, offset=float('nan'), scale=float('nan')):
 		"""Add a new GDS node
 
@@ -579,9 +579,12 @@ class gdsnode:
 			the compression method, e.g. '', 'ZIP', 'ZIP_RA', 'LZMA',
 			'LZMA_RA', 'LZ4', 'LZ4_RA'
 		valdim : a list of ints, optional
-			reset the dimensions after writing
+			reset the dimensions after writing, or the dimensions of an empty
+			node
 		closezip : bool
-			if True, close the compression after writing the initial data
+			if True, close the compression after writing the initial data;
+			if False (the default, as in R), more data can be appended and
+			readmode() should be called before reading
 		replace : bool
 			if True, replace an existing node of the same name
 		visible : bool
@@ -608,6 +611,8 @@ class gdsnode:
 				cc.readmode_gdsn(v.idx, v.pid)
 			if valdim is not None:
 				cc.setdim_gdsn(v.idx, v.pid, [int(d) for d in valdim], False)
+		elif valdim is not None:
+			cc.setdim_gdsn(v.idx, v.pid, [int(d) for d in valdim], False)
 		return v
 
 

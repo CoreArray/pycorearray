@@ -203,7 +203,7 @@ extern "C"
 static const char *ERR_NOT_FOLDER =
 	"The GDS node is not a folder!";
 static const char *ERR_READ_ONLY =
-	"Read-only and please call 'compression.gdsn(node, \"\")' before writing.";
+	"Read-only and please call 'compression(\"\")' before writing.";
 static const char *ERR_NO_DATA =
 	"There is no data field.";
 
@@ -1129,6 +1129,16 @@ PY_EXPORT PyObject* gdsnAddNode(PyObject *self, PyObject *args)
 		if (compress[0] && dynamic_cast<CdContainer*>(rv_obj))
 			static_cast<CdContainer*>(rv_obj)->SetPackedMode(compress);
 
+		// an array starts with zero length: setting the dimension saves the
+		// node header with the compression mode (as gdsfmt does), otherwise
+		// the data appended to an empty compressed node cannot be read back
+		if (CdAbstractArray *Obj = dynamic_cast<CdAbstractArray*>(rv_obj))
+		{
+			CdAbstractArray::TArrayDim Dim;
+			Dim[0] = 0;
+			Obj->ResetDim(Dim, 1);
+		}
+
 		set_obj(rv_obj, idx, ptr);
 
 	COREARRAY_CATCH
@@ -1221,7 +1231,12 @@ PY_EXPORT PyObject* gdsnAppend(PyObject *self, PyObject *args)
 		CdGDSObj *obj = get_obj(nidx, ptr_int);
 		CdAbstractArray *Obj = dynamic_cast<CdAbstractArray*>(obj);
 		if (Obj == NULL) throw ErrGDSFmt(ERR_NO_DATA);
-		append_value(Obj, val);
+		try {
+			append_value(Obj, val);
+		}
+		catch (ErrAllocWrite &E) {
+			throw ErrGDSFmt(ERR_READ_ONLY);
+		}
 		if (Obj->PipeInfo()) Obj->PipeInfo()->UpdateStreamSize();
 	COREARRAY_CATCH_NONE
 }
@@ -1254,9 +1269,13 @@ PY_EXPORT PyObject* gdsnWriteAll(PyObject *self, PyObject *args)
 				DDim[i] = PyInt_AsLong(PyList_GetItem(dim, i));
 		}
 		DDim[0] = 0;  // grow the outermost dim while appending
-		Obj->ResetDim(DDim, ndim);
-
-		append_value(Obj, val);
+		try {
+			Obj->ResetDim(DDim, ndim);
+			append_value(Obj, val);
+		}
+		catch (ErrAllocWrite &E) {
+			throw ErrGDSFmt(ERR_READ_ONLY);
+		}
 		if (Obj->PipeInfo()) Obj->PipeInfo()->UpdateStreamSize();
 	COREARRAY_CATCH_NONE
 }
@@ -1295,22 +1314,27 @@ PY_EXPORT PyObject* gdsnWrite(PyObject *self, PyObject *args)
 			throw ErrGDSFmt("'start'/'count' length must equal the dimensions.");
 
 		size_t num = 0; int sv = -1;
-		if (PyList_Check(val))
-		{
-			Py_ssize_t n = PyList_Size(val);
-			vector<UTF8String> buf(n);
-			for (Py_ssize_t i=0; i < n; i++)
+		try {
+			if (PyList_Check(val))
 			{
-				PyObject *s = PyList_GetItem(val, i);
-				if (PYSTR_IS(s)) buf[i] = UTF8Text(PYSTR_CHAR(s));
+				Py_ssize_t n = PyList_Size(val);
+				vector<UTF8String> buf(n);
+				for (Py_ssize_t i=0; i < n; i++)
+				{
+					PyObject *s = PyList_GetItem(val, i);
+					if (PYSTR_IS(s)) buf[i] = UTF8Text(PYSTR_CHAR(s));
+				}
+				Obj->WriteData(dm_st, dm_cnt, n>0 ? &buf[0] : NULL, svStrUTF8);
+			} else {
+				void *p = numpy_get_data(val, num, sv);
+				if (p == NULL)
+					throw ErrGDSFmt("'val' should be a C-contiguous numpy array "
+						"or a list of strings.");
+				Obj->WriteData(dm_st, dm_cnt, p, (C_SVType)sv);
 			}
-			Obj->WriteData(dm_st, dm_cnt, n>0 ? &buf[0] : NULL, svStrUTF8);
-		} else {
-			void *p = numpy_get_data(val, num, sv);
-			if (p == NULL)
-				throw ErrGDSFmt("'val' should be a C-contiguous numpy array or "
-					"a list of strings.");
-			Obj->WriteData(dm_st, dm_cnt, p, (C_SVType)sv);
+		}
+		catch (ErrAllocWrite &E) {
+			throw ErrGDSFmt(ERR_READ_ONLY);
 		}
 	COREARRAY_CATCH_NONE
 }

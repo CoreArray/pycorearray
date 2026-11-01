@@ -3,7 +3,8 @@
 Run directly (``python tests/test_pycorearray.py``) or under pytest.
 Covers: open/read of the bundled example, create/write/read round-trips for
 all common numeric types and string data, every compressor (ZIP / LZMA / LZ4
-and their _RA variants), multi-dimensional arrays, sub-region writes, append,
+and their _RA variants), appending to compressed nodes, multi-dimensional
+arrays, sub-region writes, append,
 folders, attributes, setdim, exist and delete, and the run-length encoded
 ("rle.*"), sparse ("sp.*") and unsigned packed real ("packedreal*u") storage
 types.
@@ -383,6 +384,57 @@ def test_packedreal_unsigned():
 			n = r.index(st)
 			assert n.description()['trait'] == tr, st
 			assert np.allclose(n.read(), v, atol=scale / 2), st
+	finally:
+		f.close()
+
+
+def test_compressed_append():
+	# appending to compressed nodes, and the read / write modes as in R
+	fn = os.path.join(tempfile.mkdtemp(), 'app.gds')
+	x = np.arange(2000, dtype=np.int32)
+	methods = ['ZIP', 'ZIP_RA', 'LZMA', 'LZMA_RA', 'LZ4', 'LZ4_RA']
+	f = pycorearray.gdsfile(); f.create(fn)
+	try:
+		r = f.root()
+		for m in methods:
+			# an empty compressed node
+			n = r.add('e_' + m, storage='int32', compress=m)
+			for i in range(20): n.append(x)
+			# the compression stays open after the initial data (closezip=False)
+			n = r.add('v_' + m, x, compress=m)
+			n.append(x)
+		# reading needs readmode() first
+		n = r.index('v_ZIP')
+		try:
+			n.read()
+			assert False, 'read() should fail before readmode()'
+		except RuntimeError as e:
+			assert 'readmode' in str(e)
+		n.readmode()
+		assert np.array_equal(n.read(), np.tile(x, 2))
+		# appending to a closed compressed node needs compression('') first
+		n = r.add('c', x, compress='ZIP', closezip=True)
+		try:
+			n.append(x)
+			assert False, 'append() should fail after closezip=True'
+		except RuntimeError as e:
+			assert 'compression' in str(e)
+		n.compression('')
+		n.append(x)
+		# the dimensions of an empty node
+		assert r.add('d', storage='int32', valdim=[0, 3]).description()['dim'] == [0, 3]
+	finally:
+		f.close()
+
+	f = pycorearray.gdsfile(); f.open(fn)
+	try:
+		r = f.root()
+		for m in methods:
+			n = r.index('e_' + m)
+			assert n.description()['compress'].split('.')[0] == m, m
+			assert np.array_equal(n.read(), np.tile(x, 20)), m
+			assert np.array_equal(r.index('v_' + m).read(), np.tile(x, 2)), m
+		assert np.array_equal(r.index('c').read(), np.tile(x, 2))
 	finally:
 		f.close()
 
