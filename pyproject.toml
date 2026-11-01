@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=64", "numpy>=1.20"]
+requires = ["setuptools>=77", "numpy>=1.20"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,9 @@ version = "0.2.0"
 description = "Python Interface to CoreArray Genomic Data Structure (GDS) Files"
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "GPLv3" }
+# pycorearray: GPL-3.0; bundled CoreArray: LGPL-3.0; LZ4/xxHash: BSD-2-Clause; zlib: Zlib
+license = "GPL-3.0-only AND LGPL-3.0-only AND BSD-2-Clause AND Zlib"
+license-files = ["LICENSE", "src/LZ4/LICENSE", "src/ZLIB/LICENSE"]
 authors = [
     { name = "Xiuwen Zheng", email = "zhengxwen@gmail.com" },
 ]
