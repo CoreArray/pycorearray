@@ -85,8 +85,12 @@ namespace CoreArray
 		} \
 		if (has_error) \
 		{ \
-			PyObject *type = (has_error==1) ? PyExc_RuntimeError : PyExc_IOError; \
-			PyErr_SetString(type, GDS_GetError()); \
+			/* keep a pending exception, e.g., KeyboardInterrupt */ \
+			if (!PyErr_Occurred()) \
+			{ \
+				PyObject *type = (has_error==1) ? PyExc_RuntimeError : PyExc_IOError; \
+				PyErr_SetString(type, GDS_GetError()); \
+			} \
 			return NULL; \
 		}
 

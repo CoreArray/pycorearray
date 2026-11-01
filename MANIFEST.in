@@ -3,3 +3,4 @@ recursive-include pycorearray/include *.h
 recursive-include src *.h
 recursive-include src *.cpp
 recursive-include src *.c
+recursive-include tests *.py

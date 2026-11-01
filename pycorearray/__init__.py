@@ -224,7 +224,9 @@ class gdsfile:
 		Parameters
 		----------
 		filename : str
-			the file name of an existing GDS file
+			the file name of an existing GDS file, or a URL of a GDS file on
+			cloud storage ('http://', 'https://', 's3://', 'gs://' or 'az://',
+			see pycorearray.cloud), which is read-only
 		readonly : bool
 			if True, the file is opened read-only; otherwise, it is allowed to write data to the file
 		allow_dup : bool
@@ -247,6 +249,12 @@ class gdsfile:
 		>>> f.show()
 		>>> f.close()
 		"""
+		if cloud._is_url(filename):
+			if not readonly:
+				raise ValueError('A GDS file on cloud storage can only be '
+					'opened read-only.')
+			cloud._open_into(self, filename)
+			return
 		self.fileid = cc.open_gds(filename, readonly, allow_dup)
 		self.filename = os.path.abspath(filename)
 
@@ -1074,3 +1082,8 @@ class gdsnode:
 
 		enum(self, "", True, True, attribute, expand)
 
+
+
+
+# cloud access (pycorearray.cloud), used by gdsfile.open()
+from pycorearray import cloud

@@ -419,6 +419,64 @@ COREARRAY_DLL_EXPORT PdGDSFile GDS_File_Open(const char *FileName,
 }
 
 
+/// open an existing GDS file via external callback stream (e.g., a cloud
+/// stream); 'close_fn' is called when the file is closed, or here if it
+/// fails to open
+COREARRAY_DLL_LOCAL PdGDSFile GDS_File_Open_Callback(void *user_data,
+	TdCbStreamRead read_fn, TdCbStreamWrite write_fn,
+	TdCbStreamSeek seek_fn, TdCbStreamGetSize getsize_fn,
+	TdCbStreamSetSize setsize_fn, TdCbStreamClose close_fn,
+	C_BOOL ReadOnly, C_BOOL AllowError)
+{
+	int gds_idx = GetEmptyFileIndex();
+	PdGDSFile file = NULL;
+
+	try {
+		file = new CdGDSFile;
+		TdAutoRef<CdStream> stream(new CdCallbackStream(
+			read_fn, write_fn, seek_fn, getsize_fn, setsize_fn,
+			close_fn, user_data));
+		file->LoadStream(stream.get(), ReadOnly, AllowError);
+		PKG_GDS_Files[gds_idx] = file;
+	}
+	catch (std::exception &E) {
+		string Msg = E.what();
+		if ((file!=NULL) && !file->Log().List().empty())
+		{
+			Msg.append(sLineBreak);
+			Msg.append("Log:");
+			for (size_t i=0; i < file->Log().List().size(); i++)
+			{
+				Msg.append(sLineBreak);
+				Msg.append(RawText(file->Log().List()[i].Msg));
+			}
+		}
+		if (file) delete file;
+		throw ErrGDSFmt(Msg);
+	}
+	catch (const char *E) {
+		string Msg = E;
+		if ((file!=NULL) && !file->Log().List().empty())
+		{
+			Msg.append(sLineBreak);
+			Msg.append("Log:");
+			for (size_t i=0; i < file->Log().List().size(); i++)
+			{
+				Msg.append(sLineBreak);
+				Msg.append(RawText(file->Log().List()[i].Msg));
+			}
+		}
+		if (file) delete file;
+		throw ErrGDSFmt(Msg);
+	}
+	catch (...) {
+		if (file) delete file;
+		throw;
+	}
+	return file;
+}
+
+
 COREARRAY_DLL_EXPORT void GDS_File_Close(PdGDSFile File)
 {
 	int gds_idx = GetFileIndex(File, false);

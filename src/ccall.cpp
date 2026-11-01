@@ -1722,6 +1722,19 @@ PY_EXPORT PyObject* gdsDiagnosis(PyObject *self, PyObject *args)
 
 extern COREARRAY_DLL_LOCAL bool pycorearray_init();
 
+// cloud access, in PyCloud.cpp
+extern COREARRAY_DLL_LOCAL void pycorearray_cloud_init();
+extern COREARRAY_DLL_LOCAL PyObject* cloudAvailable(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudOpenHTTP(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudOpenS3(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudOpenGCS(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudOpenAzure(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudPrepareRequest(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudSetOptions(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudCacheClear(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudCacheInfo(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudListStreams(PyObject*, PyObject*);
+
 static PyMethodDef module_methods[] = {
 	// file operations
 	{ "create_gds", (PyCFunction)gdsCreateGDS, METH_VARARGS, NULL },
@@ -1772,6 +1785,18 @@ static PyMethodDef module_methods[] = {
 	{ "putattr_gdsn", (PyCFunction)gdsnPutAttr, METH_VARARGS, NULL },
 	{ "delattr_gdsn", (PyCFunction)gdsnDeleteAttr, METH_VARARGS, NULL },
 
+	// cloud access
+	{ "cloud_available", (PyCFunction)cloudAvailable, METH_VARARGS, NULL },
+	{ "cloud_open_http", (PyCFunction)cloudOpenHTTP, METH_VARARGS, NULL },
+	{ "cloud_open_s3", (PyCFunction)cloudOpenS3, METH_VARARGS, NULL },
+	{ "cloud_open_gcs", (PyCFunction)cloudOpenGCS, METH_VARARGS, NULL },
+	{ "cloud_open_azure", (PyCFunction)cloudOpenAzure, METH_VARARGS, NULL },
+	{ "cloud_prepare_request", (PyCFunction)cloudPrepareRequest, METH_VARARGS, NULL },
+	{ "cloud_set_options", (PyCFunction)cloudSetOptions, METH_VARARGS, NULL },
+	{ "cloud_cache_clear", (PyCFunction)cloudCacheClear, METH_VARARGS, NULL },
+	{ "cloud_cache_info", (PyCFunction)cloudCacheInfo, METH_VARARGS, NULL },
+	{ "cloud_list_streams", (PyCFunction)cloudListStreams, METH_VARARGS, NULL },
+
 	// end
 	{ NULL, NULL, 0, NULL }
 };
@@ -1793,10 +1818,12 @@ static struct PyModuleDef ModStruct =
 PyMODINIT_FUNC PyInit_ccall()
 {
 	if (!pycorearray_init()) return NULL;
+	pycorearray_cloud_init();
 #else
 PyMODINIT_FUNC initccall()
 {
 	pycorearray_init();
+	pycorearray_cloud_init();
 #endif
 
 	// create the module and add the functions

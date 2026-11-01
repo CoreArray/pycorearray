@@ -18,6 +18,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Install libcurl and OpenSSL (for cloud access)
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev
+
       - name: Install build tools
         run: python -m pip install --upgrade pip setuptools numpy pytest
 

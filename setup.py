@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import sys
 import sysconfig
 
@@ -72,7 +74,19 @@ lz4_fnlst = [ os.path.join('src', 'LZ4', fn) for fn in [
 
 pycorearray_fnlst = [ os.path.join('src', fn) for fn in [
 	'PyCoreArray.cpp',
+	'PyCloud.cpp',
 	'ccall.cpp' ] ]
+
+# cloud access: src/cloud/ is copied unchanged from src/ of the gdscloud R
+# package (the upstream), these files plus cloud_stream.h, curl_backend.h and
+# openssl_compat.h
+cloud_fnlst = [ os.path.join('src', 'cloud', fn) for fn in [
+	'cloud_stream.c',
+	'curl_backend.c',
+	'http_backend.c',
+	's3_backend.c',
+	'gcs_backend.c',
+	'azure_backend.c' ] ]
 
 
 # ----------------------------------------------------------------------------
@@ -103,18 +117,81 @@ def _lzma_dirs():
 
 lzma_inc, lzma_lib = _lzma_dirs()
 
+
+# ----------------------------------------------------------------------------
+# Cloud access needs libcurl, and OpenSSL libcrypto for request signing except
+# on macOS (which uses CommonCrypto). Without them, or if the environment
+# variable PYCOREARRAY_NO_CLOUD is set, the extension is built without cloud
+# access.
+# ----------------------------------------------------------------------------
+def _flags(cmd):
+	try:
+		return subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().split()
+	except (OSError, subprocess.CalledProcessError):
+		return None
+
+def _cloud_flags():
+	if os.environ.get('PYCOREARRAY_NO_CLOUD'):
+		return None, 'PYCOREARRAY_NO_CLOUD is set'
+	# libcurl: prefer the system curl-config on macOS
+	if sys.platform == 'darwin' and os.path.exists('/usr/bin/curl-config'):
+		curl_config = '/usr/bin/curl-config'
+	else:
+		curl_config = shutil.which('curl-config')
+	cflags = libs = None
+	if curl_config:
+		cflags, libs = _flags([curl_config, '--cflags']), _flags([curl_config, '--libs'])
+	if libs is None:
+		cflags = _flags(['pkg-config', '--cflags', 'libcurl'])
+		libs = _flags(['pkg-config', '--libs', 'libcurl'])
+	if libs is None:
+		return None, 'libcurl not found'
+	cflags = cflags or []
+	if sys.platform == 'darwin':
+		# a non-system libcurl (e.g., Homebrew) must be found at runtime
+		libs += [ '-Wl,-rpath,' + f[2:] for f in libs if f.startswith('-L') ]
+	else:
+		prefix = os.environ.get('OPENSSL_PREFIX')
+		if prefix:
+			cflags += [ '-I' + os.path.join(prefix, 'include') ]
+			libs += [ '-L' + os.path.join(prefix, 'lib'), '-lcrypto' ]
+		else:
+			ssl_libs = _flags(['pkg-config', '--libs', 'libcrypto'])
+			if ssl_libs is not None:
+				cflags += _flags(['pkg-config', '--cflags', 'libcrypto']) or []
+				libs += ssl_libs
+			elif any(os.path.exists(os.path.join(d, 'openssl', 'evp.h'))
+					for d in ('/usr/include', '/usr/local/include')):
+				libs += [ '-lcrypto' ]
+			else:
+				return None, 'OpenSSL (libcrypto) not found'
+	return (cflags, libs), None
+
+
+cloud, why_no_cloud = _cloud_flags()
+if cloud is None:
+	sys.stderr.write('pycorearray: building without cloud access (%s)\n' % why_no_cloud)
+
 extra_compile_args = ['-O2']
 extra_link_args = []
 # Make sure the dynamic linker can find a Homebrew liblzma at runtime.
 for l in lzma_lib:
 	extra_link_args += ['-Wl,-rpath,' + l]
 
+src_fnlst = corearray_fnlst + zlib_fnlst + lz4_fnlst + pycorearray_fnlst
+define_cloud = []
+if cloud is not None:
+	src_fnlst += cloud_fnlst
+	define_cloud = [ ('PYCOREARRAY_WITH_CLOUD', None) ]
+	extra_compile_args += cloud[0]
+	extra_link_args += cloud[1]
+
 ext = Extension(
 	'pycorearray.ccall',
-	corearray_fnlst + zlib_fnlst + lz4_fnlst + pycorearray_fnlst,
+	src_fnlst,
 	include_dirs = [ 'pycorearray/include', 'src/CoreArray', numpy.get_include() ] + lzma_inc,
 	library_dirs = lzma_lib,
-	define_macros = [
+	define_macros = define_cloud + [
 		('USING_PYTHON', None),
 		('_FILE_OFFSET_BITS', 64),
 		# XZ/LZMA via the system liblzma (external-lib mode); LZ4 bundled in src/LZ4
