@@ -1788,7 +1788,7 @@ PyMODINIT_FUNC initccall()
 		// add some symbolic constants to the module
 		PyObject *dict = PyModule_GetDict(mod);
 		// add api pointer
-		PyObject *c_api = PyCapsule_New((void*)PyGDS_API, NULL, NULL);
+		PyObject *c_api = PyCapsule_New(PyGDS_API, PYCOREARRAY_C_API_NAME, NULL);
 		if (c_api)
 		{
 			PyDict_SetItemString(dict, "_GDS_C_API", c_api);

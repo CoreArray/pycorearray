@@ -387,6 +387,18 @@ def test_packedreal_unsigned():
 		f.close()
 
 
+def test_c_api_capsule():
+	# the capsule read by Init_GDS_Routines() in PyGDS2.h; update the expected
+	# version and function count together with PYCOREARRAY_C_API_* in PyGDS.h
+	import ctypes
+	get_pointer = ctypes.pythonapi.PyCapsule_GetPointer
+	get_pointer.restype = ctypes.c_void_p
+	get_pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+	p = get_pointer(pycorearray.ccall._GDS_C_API, b'pycorearray.ccall._GDS_C_API')
+	major, minor, count = (ctypes.c_int * 3).from_address(p)
+	assert (major, minor, count) == (1, 0, 47)
+
+
 def _run_all():
 	import traceback
 	fns = [v for k, v in sorted(globals().items())

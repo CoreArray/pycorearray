@@ -353,13 +353,31 @@ extern "C" {
 
 
 	// ==================================================================
+	// C API exported by pycorearray.ccall to other extension modules
 
-	/// export pycorearray C API pointer
+	/// C API version: increase MAJOR when entries of the function table are
+	/// removed or reordered, and MINOR when entries are appended to it
+	#define PYCOREARRAY_C_API_MAJOR    1
+	#define PYCOREARRAY_C_API_MINOR    0
+
+	/// name of the PyCapsule pycorearray.ccall._GDS_C_API
+	#define PYCOREARRAY_C_API_NAME     "pycorearray.ccall._GDS_C_API"
+
+	/// the C API stored in the PyCapsule
+	typedef struct
+	{
+		int major;          ///< PYCOREARRAY_C_API_MAJOR of pycorearray
+		int minor;          ///< PYCOREARRAY_C_API_MINOR of pycorearray
+		int count;          ///< the number of functions in table
+		void (**table)();   ///< the function table
+	} TPyGDS_C_API;
+
+	/// export pycorearray C API pointer (TPyGDS_C_API*)
 	extern void *PyGDS_API;
 
 	#ifndef COREARRAY_PYCOREARRAY_PACKAGE
 
-	/// initialize GDS interface, return -1 if fails
+	/// initialize GDS interface, return -1 with a Python exception if fails
 	extern int Init_GDS_Routines();
 
 	#endif  // COREARRAY_PYCOREARRAY_PACKAGE

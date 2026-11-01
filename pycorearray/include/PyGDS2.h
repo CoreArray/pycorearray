@@ -443,6 +443,10 @@ COREARRAY_DLL_EXPORT int GDS_Mach_Finite(double val)
 }
 
 
+// the number of functions in the C API table used by this file
+#define IDX_END    (IDX_MACH + 3)
+
+
 
 
 
@@ -717,40 +721,29 @@ COREARRAY_DLL_LOCAL void GDS_R_Is_Element(PdAbstractArray Obj, SEXP SetEL,
 
 // ===========================================================================
 
-/// initialize the GDS routines
+/// initialize the GDS routines, return -1 with a Python exception if fails
 int Init_GDS_Routines()
 {
-	PyObject *pkg = PyImport_ImportModule("pycorearray.ccall");
-	if (pkg == NULL)
+	// import pycorearray.ccall, get _GDS_C_API and check the capsule name
+	const TPyGDS_C_API *api =
+		(const TPyGDS_C_API*)PyCapsule_Import(PYCOREARRAY_C_API_NAME, 0);
+	if (api == NULL) return -1;
+
+	// require the same major version and all the functions used here
+	if (api->major != PYCOREARRAY_C_API_MAJOR ||
+		api->minor < PYCOREARRAY_C_API_MINOR || api->count < IDX_END)
 	{
-		PyErr_SetString(PyExc_ImportError, "pycorearray.ccall failed to import");
+		PyErr_Format(PyExc_ImportError,
+			"pycorearray C API mismatch: this module needs C API %d.%d "
+			"(%d functions), but the installed pycorearray provides C API "
+			"%d.%d (%d functions); install a compatible pycorearray or "
+			"rebuild this module",
+			PYCOREARRAY_C_API_MAJOR, PYCOREARRAY_C_API_MINOR, (int)IDX_END,
+			api->major, api->minor, api->count);
 		return -1;
 	}
 
-	PyObject *api = NULL;
-	api = PyObject_GetAttrString(pkg, "_GDS_C_API");
-	Py_DECREF(pkg);
-	if (api == NULL)
-	{
-		PyErr_SetString(PyExc_AttributeError, "_GDS_C_API not found");
-		return -1;
-	}
-
-	if (!PyCapsule_CheckExact(api))
-	{
-		PyErr_SetString(PyExc_RuntimeError, "_GDS_C_API is not PyCapsule object");
-		Py_DECREF(api);
-		return -1;
-	}
-	c_api = (TFUNC*)PyCapsule_GetPointer(api, NULL);
-
-	Py_DECREF(api);
-	if (c_api == NULL)
-	{
-		PyErr_SetString(PyExc_RuntimeError, "_GDS_C_API is NULL pointer");
-		return -1;
-	}
-
+	c_api = (TFUNC*)api->table;
 	return 0;
 }
 

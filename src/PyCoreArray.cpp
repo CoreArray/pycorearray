@@ -898,6 +898,13 @@ static TFUNC c_api[] = {
 	(TFUNC)GDS_Mach_Finite
 };
 
+/// the C API stored in the PyCapsule pycorearray.ccall._GDS_C_API
+static TPyGDS_C_API c_api_obj =
+{
+	PYCOREARRAY_C_API_MAJOR, PYCOREARRAY_C_API_MINOR,
+	(int)(sizeof(c_api) / sizeof(c_api[0])), c_api
+};
+
 
 
 // import numpy functions
@@ -909,7 +916,7 @@ static void _init_() { import_array(); }
 
 COREARRAY_DLL_LOCAL bool pycorearray_init()
 {
-	PyGDS_API = (void*)c_api;
+	PyGDS_API = (void*)&c_api_obj;
 	// register CoreArray classes and objects
 	RegisterClass();
 	// import numpy
