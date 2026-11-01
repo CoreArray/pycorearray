@@ -68,8 +68,8 @@ extern "C" {
 
 	// ==================================================================
 
-	/// Version of package pygds: v0.1
-	#define PYGDS_VERSION       0x000100
+	/// Version of package pycorearray: v0.2
+	#define PYGDS_VERSION       0x000200
 
 
 	// [[ ********
