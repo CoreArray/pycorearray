@@ -118,87 +118,62 @@ g.shape
 f.close()
 ```
 
-### Open a file on cloud storage
+
+## Cloud Storage
+
+A GDS file on cloud storage can be opened directly, read-only, without
+downloading the whole file: only the blocks that are read are fetched.
+`http://` and `https://` URLs, Amazon S3 (`s3://`, also S3-compatible
+services), Google Cloud Storage (`gs://`) and Azure Blob Storage (`az://`) are
+supported. For example, a public file on Amazon S3:
 
 ```python
+import pycorearray as gds
+
 f = gds.gdsfile()
-f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')   # a public file, 86.5M
+f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')
+f.show()
+```
+
+```
+File: s3://gds-stat/download/hapmap/hapmap_r23a.gds (86.5M)
++    [  ] *
+|--+ description   [  ] *
+|--+ sample.id   { Str8 270 LZMA_ra(17.3%), 381B } *
+|--+ variant.id   { Int32 4098136 LZMA_ra(3.19%), 511.4K } *
+|--+ position   { Int32 4098136 LZMA_ra(48.2%), 7.5M } *
+|--+ chromosome   { Str8 4098136 LZMA_ra(0.02%), 1.7K } *
+|--+ allele   { Str8 4098136 LZMA_ra(12.8%), 2.0M } *
+|--+ genotype   [  ] *
+|  |--+ data   { Bit2 4098136x270x2 LZMA_ra(12.4%), 65.4M } *
+|  |--+ extra.index   { Int32 0x3 LZMA_ra, 18B } *
+|  \--+ extra   { Int16 0 LZMA_ra, 18B }
+|--+ phase   [  ]
+|  |--+ data   { Bit1 4098136x270 LZMA_ra(0.01%), 19.8K } *
+|  |--+ extra.index   { Int32 0x3 LZMA_ra, 18B } *
+|  \--+ extra   { Bit1 0 LZMA_ra, 18B }
+|--+ annotation   [  ]
+|  |--+ id   { Str8 4098136 LZMA_ra(27.7%), 11.1M } *
+|  |--+ qual   { Float32 4098136 LZMA_ra(0.02%), 2.5K } *
+|  |--+ filter   { Int32,factor 4098136 LZMA_ra(0.02%), 2.5K } *
+|  |--+ info   [  ]
+|  \--+ format   [  ]
+\--+ sample.annotation   [  ]
+   |--+ family   { Str8 270 LZMA_ra(17.3%), 381B } *
+   |--+ father   { Str8 270 LZMA_ra(28.2%), 261B } *
+   |--+ mother   { Str8 270 LZMA_ra(28.2%), 261B } *
+   |--+ sex   { Str8 270 LZMA_ra(27.0%), 153B } *
+   \--+ phenotype   { Int32 270 LZMA_ra(8.70%), 101B } *
+```
+
+```python
 f.index('position').read(start=[1000], count=[5])
 ## array([2409958, 2410723, 2410773, 2412474, 2413426], dtype=int32)
 f.close()
 ```
 
-Only the blocks that are read are downloaded: opening this file and reading
-these values fetch a few 1 MB blocks, not the whole file. See
-[Cloud Storage](#cloud-storage) for the supported services and credentials.
-
-
-
-## Cloud Storage
-
-`gdsfile.open()` also opens a GDS file on cloud storage, read-only:
-`http://` and `https://` URLs, Amazon S3 (`s3://bucket/key`, and S3-compatible
-services such as MinIO, Ceph, Cloudflare R2, Wasabi or Backblaze B2 via a
-custom endpoint), Google Cloud Storage (`gs://bucket/key`) and Azure Blob
-Storage (`az://container/blob`), as in the example above. Only the blocks that
-are actually read are fetched, using HTTP Range requests with an in-memory
-block cache, so random access to a remote file works like access to a local
-one.
-
-Credentials are taken from, in this order, the settings for the longest
-matching URL prefix, the settings of the session, and the usual environment
-variables. A token can also be a function returning it, which is called each
-time a file is opened, so that expiring tokens are refreshed:
-
-```python
-from pycorearray import cloud
-
-cloud.config_s3(aws_access_key_id='...', aws_secret_access_key='...',
-    region='us-west-2')
-cloud.config_s3(endpoint='https://minio.example.org:9000', url='s3://my-bucket/')
-cloud.config_gcs(access_token=lambda: subprocess.check_output(
-    ['gcloud', 'auth', 'print-access-token'], text=True).strip())
-cloud.config_azure(account_name='myaccount', sas_token='sv=...')
-cloud.config_http(bearer_token='...', url='https://private.example.org/')
-```
-
-| Service | Environment variables |
-|---|---|
-| HTTP/HTTPS | `GDSCLOUD_HTTP_TOKEN` |
-| Amazon S3 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL_S3` or `AWS_ENDPOINT_URL`, `GDSCLOUD_S3_PATH_STYLE` |
-| Google Cloud Storage | `GCS_ACCESS_TOKEN` |
-| Azure Blob Storage | `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_KEY`, `AZURE_STORAGE_SAS_TOKEN`, `AZURE_STORAGE_ACCESS_TOKEN`, `AZURE_STORAGE_ENDPOINT_SUFFIX`, `AZURE_STORAGE_SERVICE_ENDPOINT`, `AZURE_STORAGE_CONNECTION_STRING` |
-
-Without credentials, requests are anonymous. `cloud.options()` sets the
-timeouts, the number of retries after a transient failure and the cache size,
-whose defaults can also be set by `GDSCLOUD_CONNECT_TIMEOUT`,
-`GDSCLOUD_TIMEOUT`, `GDSCLOUD_MAX_RETRIES` and `GDSCLOUD_CACHE_SIZE_MB`, and
-the CA bundle to verify HTTPS servers (by default, the file in
-`CURL_CA_BUNDLE` or `SSL_CERT_FILE`, or the CA bundle of the system).
-
-Child processes started by `fork` inherit the settings; with `spawn` (the
-default on macOS and Windows), install them in each worker:
-
-```python
-pool = multiprocessing.Pool(4, initializer=cloud.import_credentials,
-    initargs=(cloud.export_credentials(),))
-```
-
-A read from cloud storage keeps the GIL while it waits for the network, so use
-processes rather than threads to read in parallel.
-
-The cloud access uses the C code of the R package
-[gdscloud](https://github.com/zhengxwen/gdscloud), with the same environment
-variables; the Python functions correspond to the R ones:
-
-| R (gdscloud) | Python (`pycorearray.cloud`) |
-|---|---|
-| `gdsCloudOpen(url)` | `open(url)`, or `gdsfile().open(url)` |
-| `gdsCloudConfigHTTP()`, `gdsCloudConfigS3()`, `gdsCloudConfigGCS()`, `gdsCloudConfigAzure()` | `config_http()`, `config_s3()`, `config_gcs()`, `config_azure()` |
-| `gdsCloudOptions()` | `options()` |
-| `gdsCloudCacheSize()`, `gdsCloudCacheClear()`, `gdsCloudCacheInfo()` | `cache_size()`, `cache_clear()`, `cache_info()` |
-| `gdsCloudList()`, `gdsCloudSchemes()` | `list_streams()`, `schemes()` |
-| `gdsCloudExportCredentials(cl)` | `export_credentials()` and `import_credentials()` |
+Credentials for private files are taken from the usual environment variables
+of each service, or set with `pycorearray.cloud`; see `help(pycorearray.cloud)`.
 
 
 
