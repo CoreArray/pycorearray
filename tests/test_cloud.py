@@ -644,11 +644,12 @@ def test_keyboard_interrupt():
 		except KeyboardInterrupt:
 			print('KeyboardInterrupt', flush=True)
 	''')
-	env = dict(os.environ, PYTHONPATH=os.pathsep.join(
-		[os.path.dirname(os.path.dirname(pycorearray.__file__))] +
-		os.environ.get('PYTHONPATH', '').split(os.pathsep)))
+	# 'python -c' puts the working directory first on sys.path, so run the
+	# child next to the pycorearray being tested (not the source tree without
+	# the built extension)
 	child = subprocess.Popen([sys.executable, '-c', code, url + '/file.gds'],
-		stdout=subprocess.PIPE, text=True, env=env)
+		stdout=subprocess.PIPE, text=True,
+		cwd=os.path.dirname(os.path.dirname(pycorearray.__file__)))
 	try:
 		assert child.stdout.readline().strip() == 'started'
 		time.sleep(2)   # let the child get into the transfer
