@@ -40,3 +40,25 @@ packages = ["pycorearray", "pycorearray.data", "pycorearray.include"]
 [tool.setuptools.package-data]
 "pycorearray.data" = ["*.gds"]
 "pycorearray.include" = ["*.h"]
+
+# wheels: .github/workflows/wheels.yml
+[tool.cibuildwheel]
+# no free-threaded builds, no musllinux
+skip = ["cp3??t-*", "*-musllinux_*"]
+test-requires = ["pytest"]
+test-sources = ["tests", "tools/wheels/check_https.py"]
+test-command = [
+    "python -c \"import pycorearray; assert pycorearray.cloud.available()\"",
+    "python -m pytest tests",
+    "python tools/wheels/check_https.py",
+]
+
+[tool.cibuildwheel.linux]
+archs = ["auto64"]
+before-all = "sh tools/wheels/build-deps-linux.sh"
+# no debug information (-g in the CFLAGS of Python), which is 90% of the size
+environment = { OPENSSL_PREFIX = "/usr/local", CFLAGS = "-g0", CXXFLAGS = "-g0" }
+
+[tool.cibuildwheel.macos]
+before-all = "sh tools/wheels/build-xz-macos.sh /tmp/xz"
+environment = { MACOSX_DEPLOYMENT_TARGET = "11.0", LZMA_PREFIX = "/tmp/xz" }

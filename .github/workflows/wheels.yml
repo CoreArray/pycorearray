@@ -1,0 +1,86 @@
+name: Wheels
+
+# the cibuildwheel settings are in pyproject.toml
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+    # not for tags
+    paths:
+      - ".github/workflows/wheels.yml"
+      - "tools/wheels/**"
+      - "pyproject.toml"
+      - "setup.py"
+      - "MANIFEST.in"
+  workflow_dispatch:
+
+jobs:
+  wheels:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Linux x86_64 and aarch64, macOS x86_64 and arm64
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-15-intel, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pypa/cibuildwheel@v4.3.5
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the source distribution
+        run: pipx run build --sdist
+
+      - name: Check the metadata
+        run: pipx run twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+
+  # the libcurl in the Linux wheels has no CA bundle of its own: check HTTPS
+  # on other distributions than the one the wheels are built on
+  https:
+    needs: wheels
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["ubuntu:24.04", "debian:13", "fedora:latest", "opensuse/tumbleweed"]
+    container: ${{ matrix.image }}
+    steps:
+      - name: Install Python
+        run: |
+          if command -v apt-get; then
+            apt-get update && apt-get install -y python3-venv ca-certificates
+          elif command -v dnf; then
+            dnf install -y python3
+          else
+            zypper --non-interactive install python3
+          fi
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-ubuntu-latest
+          path: wheelhouse
+
+      - name: Install the wheel
+        run: |
+          python3 -m venv /tmp/venv
+          /tmp/venv/bin/pip install numpy
+          /tmp/venv/bin/pip install --no-index --find-links wheelhouse pycorearray
+
+      - name: Read a file over HTTPS
+        run: /tmp/venv/bin/python tools/wheels/check_https.py
