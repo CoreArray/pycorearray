@@ -1731,6 +1731,7 @@ extern COREARRAY_DLL_LOCAL PyObject* cloudOpenGCS(PyObject*, PyObject*);
 extern COREARRAY_DLL_LOCAL PyObject* cloudOpenAzure(PyObject*, PyObject*);
 extern COREARRAY_DLL_LOCAL PyObject* cloudPrepareRequest(PyObject*, PyObject*);
 extern COREARRAY_DLL_LOCAL PyObject* cloudSetOptions(PyObject*, PyObject*);
+extern COREARRAY_DLL_LOCAL PyObject* cloudCurlCABundle(PyObject*, PyObject*);
 extern COREARRAY_DLL_LOCAL PyObject* cloudCacheClear(PyObject*, PyObject*);
 extern COREARRAY_DLL_LOCAL PyObject* cloudCacheInfo(PyObject*, PyObject*);
 extern COREARRAY_DLL_LOCAL PyObject* cloudListStreams(PyObject*, PyObject*);
@@ -1793,6 +1794,7 @@ static PyMethodDef module_methods[] = {
 	{ "cloud_open_azure", (PyCFunction)cloudOpenAzure, METH_VARARGS, NULL },
 	{ "cloud_prepare_request", (PyCFunction)cloudPrepareRequest, METH_VARARGS, NULL },
 	{ "cloud_set_options", (PyCFunction)cloudSetOptions, METH_VARARGS, NULL },
+	{ "cloud_curl_ca_bundle", (PyCFunction)cloudCurlCABundle, METH_VARARGS, NULL },
 	{ "cloud_cache_clear", (PyCFunction)cloudCacheClear, METH_VARARGS, NULL },
 	{ "cloud_cache_info", (PyCFunction)cloudCacheInfo, METH_VARARGS, NULL },
 	{ "cloud_list_streams", (PyCFunction)cloudListStreams, METH_VARARGS, NULL },

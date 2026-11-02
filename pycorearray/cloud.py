@@ -31,6 +31,7 @@ import copy
 import datetime
 import os
 import re
+import sys
 
 import pycorearray.ccall as cc
 
@@ -167,12 +168,41 @@ def _env_num(name, default, minimum=1):
 	return v if v >= minimum else default
 
 
+# the CA bundles of Linux distributions, in the order Go's crypto/x509 looks
+# for them
+_CA_BUNDLES = (
+	'/etc/ssl/certs/ca-certificates.crt',                # Debian, Ubuntu, Arch
+	'/etc/pki/tls/certs/ca-bundle.crt',                  # Fedora, RHEL
+	'/etc/ssl/ca-bundle.pem',                            # openSUSE
+	'/etc/pki/tls/cacert.pem',                           # OpenELEC
+	'/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem', # CentOS, RHEL 7
+	'/etc/ssl/cert.pem',                                 # Alpine
+)
+
+def _default_ca_bundle():
+	# the environment variables of the curl command line tool
+	for name in ('CURL_CA_BUNDLE', 'SSL_CERT_FILE'):
+		v = os.environ.get(name, '')
+		if v:
+			return v
+	# a libcurl bundled with a Linux wheel has no CA bundle, or the path of the
+	# build system, which may not exist here
+	if sys.platform.startswith('linux'):
+		fn = cc.cloud_curl_ca_bundle()
+		if not (fn and os.path.isfile(fn)):
+			for fn in _CA_BUNDLES:
+				if os.path.isfile(fn):
+					return fn
+	return ''   # the libcurl default
+
+
 def _init_options():
 	return {
 		'connect_timeout': _env_num('connect_timeout', 30),
 		'timeout': _env_num('timeout', 60),
 		'max_retries': int(_env_num('max_retries', 3, minimum=0)),
 		'cache_size': _env_num('cache_size_mb', 64),
+		'ca_bundle': _default_ca_bundle(),
 	}
 
 # the defaults can be set by the environment variables GDSCLOUD_CONNECT_TIMEOUT,
@@ -188,7 +218,7 @@ def _check_num(v, name, minimum):
 
 
 def options(connect_timeout=None, timeout=None, max_retries=None,
-		cache_size=None):
+		cache_size=None, ca_bundle=None):
 	"""Get or set the options of cloud access
 
 	Parameters
@@ -203,10 +233,16 @@ def options(connect_timeout=None, timeout=None, max_retries=None,
 		(connection reset, timeout, HTTP 408/429/5xx), with exponential back-off
 	cache_size : float
 		the block cache size (in MB) of a newly opened file
+	ca_bundle : str
+		the CA certificate bundle (a PEM file) to verify HTTPS servers, ''
+		for the default of libcurl
 
 	None keeps the current value. The defaults (30, 60, 3, 64) can be set by
 	the environment variables GDSCLOUD_CONNECT_TIMEOUT, GDSCLOUD_TIMEOUT,
-	GDSCLOUD_MAX_RETRIES and GDSCLOUD_CACHE_SIZE_MB.
+	GDSCLOUD_MAX_RETRIES and GDSCLOUD_CACHE_SIZE_MB. The default CA bundle is
+	the file in CURL_CA_BUNDLE or SSL_CERT_FILE; otherwise, on Linux, if the
+	CA bundle built into libcurl does not exist (as with the libcurl bundled
+	with a wheel), the CA bundle of the Linux distribution.
 
 	Returns
 	-------
@@ -227,12 +263,19 @@ def options(connect_timeout=None, timeout=None, max_retries=None,
 		_options['max_retries'] = int(_check_num(max_retries, 'max_retries', 0))
 	if cache_size is not None:
 		_options['cache_size'] = _check_num(cache_size, 'cache_size', 1)
+	if ca_bundle is not None:
+		if not isinstance(ca_bundle, str):
+			raise TypeError("'ca_bundle' should be a string.")
+		if ca_bundle and not os.path.isfile(ca_bundle):
+			raise ValueError("'ca_bundle': no such file '%s'." % ca_bundle)
+		_options['ca_bundle'] = ca_bundle
 	return dict(_options)
 
 
 def _apply_options():
 	cc.cloud_set_options(float(_options['connect_timeout']),
-		float(_options['timeout']), float(_options['max_retries']))
+		float(_options['timeout']), float(_options['max_retries']),
+		_options['ca_bundle'])
 
 
 # ===========================================================================

@@ -252,16 +252,31 @@ void cloud_format_error(char *out, size_t out_size,
 
 
 // =====================================================================
-// Transfer setup: timeouts and user interrupts
+// Transfer setup: timeouts, user interrupts and the CA bundle
 // =====================================================================
 
 static long g_connect_timeout = 30;   // seconds
 static long g_low_speed_time = 60;    // seconds below 1 byte/s before abort
+static char *g_ca_bundle = NULL;      // NULL: the libcurl default
 
 void cloud_set_timeouts(long connect_timeout, long low_speed_time)
 {
 	if (connect_timeout > 0) g_connect_timeout = connect_timeout;
 	if (low_speed_time > 0) g_low_speed_time = low_speed_time;
+}
+
+int cloud_set_ca_bundle(const char *path)
+{
+	char *s = NULL;
+	if (path && path[0])
+	{
+		s = (char *)malloc(strlen(path) + 1);
+		if (!s) return -1;
+		strcpy(s, path);
+	}
+	free(g_ca_bundle);
+	g_ca_bundle = s;
+	return 0;
 }
 
 int (*cloud_interrupt_hook)(void) = NULL;
@@ -298,6 +313,7 @@ void cloud_curl_setup(CURL *curl, CloudTransfer *tr)
 	curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, g_connect_timeout);
 	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
 	curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, g_low_speed_time);
+	if (g_ca_bundle) curl_easy_setopt(curl, CURLOPT_CAINFO, g_ca_bundle);
 	curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 #if LIBCURL_VERSION_NUM >= 0x072000
 	curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferinfo_cb);

@@ -413,17 +413,40 @@ COREARRAY_DLL_LOCAL PyObject* cloudPrepareRequest(PyObject *self,
 
 
 /// set the transfer options: timeouts in seconds and the maximum number of
-/// retries (a value <= 0 or < 0 respectively keeps the current one)
+/// retries (a value <= 0 or < 0 respectively keeps the current one), and the
+/// CA bundle ("" for the libcurl default)
 COREARRAY_DLL_LOCAL PyObject* cloudSetOptions(PyObject *self, PyObject *args)
 {
 	double ct, lt, mr;
-	if (!PyArg_ParseTuple(args, "ddd", &ct, &lt, &mr))
+	const char *ca;
+	if (!PyArg_ParseTuple(args, "ddds", &ct, &lt, &mr, &ca))
 		return NULL;
 	cloud_set_timeouts(
 		(IsFinite(ct) && ct > 0) ? (long)ct : 0,
 		(IsFinite(lt) && lt > 0) ? (long)lt : 0);
 	cloud_set_max_retries((IsFinite(mr) && mr >= 0) ? (int)mr : -1);
+	if (cloud_set_ca_bundle(ca) != 0)
+		return PyErr_NoMemory();
 	Py_RETURN_NONE;
+}
+
+
+/// the CA bundle built into libcurl, None if none or unknown (libcurl < 7.84)
+COREARRAY_DLL_LOCAL PyObject* cloudCurlCABundle(PyObject *self, PyObject *args)
+{
+	string s;
+#if LIBCURL_VERSION_NUM >= 0x075400
+	CURL *curl = curl_easy_init();
+	if (curl)
+	{
+		char *p = NULL;
+		if (curl_easy_getinfo(curl, CURLINFO_CAINFO, &p) == CURLE_OK && p)
+			s = p;
+		curl_easy_cleanup(curl);
+	}
+#endif
+	if (s.empty()) Py_RETURN_NONE;
+	return PYSTR_SET(s.c_str());
 }
 
 
@@ -504,6 +527,8 @@ COREARRAY_DLL_LOCAL PyObject* cloudPrepareRequest(PyObject *self,
 	PyObject *args) { return no_cloud(); }
 COREARRAY_DLL_LOCAL PyObject* cloudSetOptions(PyObject *self, PyObject *args)
 	{ return no_cloud(); }
+COREARRAY_DLL_LOCAL PyObject* cloudCurlCABundle(PyObject *self, PyObject *args)
+	{ Py_RETURN_NONE; }
 COREARRAY_DLL_LOCAL PyObject* cloudCacheClear(PyObject *self, PyObject *args)
 	{ return no_cloud(); }
 COREARRAY_DLL_LOCAL PyObject* cloudCacheInfo(PyObject *self, PyObject *args)

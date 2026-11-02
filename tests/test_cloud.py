@@ -104,7 +104,7 @@ def test_valid_schemes_fail_on_access_not_scheme():
 def test_options():
 	opt = cloud.options()
 	assert opt == {'connect_timeout': 30, 'timeout': 60, 'max_retries': 3,
-		'cache_size': 64}
+		'cache_size': 64, 'ca_bundle': cloud._default_ca_bundle()}
 	cloud.options(connect_timeout=5, timeout=7)
 	cur = cloud.options()
 	assert cur['connect_timeout'] == 5 and cur['timeout'] == 7
@@ -119,6 +119,36 @@ def test_options():
 	for v in (-1, 0, 'big'):
 		with pytest.raises(ValueError):
 			cloud.cache_size(v)
+
+
+def test_ca_bundle(monkeypatch, tmp_path):
+	ca = tmp_path / 'ca.pem'
+	ca.write_text('')
+	assert cloud.options(ca_bundle=str(ca))['ca_bundle'] == str(ca)
+	assert cloud.options(ca_bundle='')['ca_bundle'] == ''
+	with pytest.raises(ValueError, match='no such file'):
+		cloud.options(ca_bundle=str(tmp_path / 'none.pem'))
+	with pytest.raises(TypeError):
+		cloud.options(ca_bundle=1)
+	# the default: the environment variables of the curl tool first
+	monkeypatch.setenv('CURL_CA_BUNDLE', '/a/curl.pem')
+	monkeypatch.setenv('SSL_CERT_FILE', '/a/ssl.pem')
+	assert cloud._default_ca_bundle() == '/a/curl.pem'
+	monkeypatch.delenv('CURL_CA_BUNDLE')
+	assert cloud._default_ca_bundle() == '/a/ssl.pem'
+	monkeypatch.delenv('SSL_CERT_FILE')
+	# then, on Linux, the CA bundle of the distribution if the one built into
+	# libcurl does not exist
+	monkeypatch.setattr(cloud, '_CA_BUNDLES', (str(tmp_path / 'none.pem'), str(ca)))
+	monkeypatch.setattr(sys, 'platform', 'linux')
+	for builtin in (None, str(tmp_path / 'build-system.crt')):
+		monkeypatch.setattr(cloud.cc, 'cloud_curl_ca_bundle', lambda: builtin)
+		assert cloud._default_ca_bundle() == str(ca)
+	monkeypatch.setattr(cloud.cc, 'cloud_curl_ca_bundle', lambda: str(ca))
+	assert cloud._default_ca_bundle() == ''
+	monkeypatch.setattr(sys, 'platform', 'darwin')
+	monkeypatch.setattr(cloud.cc, 'cloud_curl_ca_bundle', lambda: None)
+	assert cloud._default_ca_bundle() == ''
 
 
 def test_cache_info_and_clear():

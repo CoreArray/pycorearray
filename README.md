@@ -172,7 +172,9 @@ cloud.config_http(bearer_token='...', url='https://private.example.org/')
 Without credentials, requests are anonymous. `cloud.options()` sets the
 timeouts, the number of retries after a transient failure and the cache size,
 whose defaults can also be set by `GDSCLOUD_CONNECT_TIMEOUT`,
-`GDSCLOUD_TIMEOUT`, `GDSCLOUD_MAX_RETRIES` and `GDSCLOUD_CACHE_SIZE_MB`.
+`GDSCLOUD_TIMEOUT`, `GDSCLOUD_MAX_RETRIES` and `GDSCLOUD_CACHE_SIZE_MB`, and
+the CA bundle to verify HTTPS servers (by default, the file in
+`CURL_CA_BUNDLE` or `SSL_CERT_FILE`, or the CA bundle of the system).
 
 Child processes started by `fork` inherit the settings; with `spawn` (the
 default on macOS and Windows), install them in each worker:

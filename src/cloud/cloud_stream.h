@@ -138,7 +138,8 @@ void cloud_format_error(char *out, size_t out_size,
 
 
 // =====================================================================
-// Transfer setup shared by the backends: timeouts and user interrupts
+// Transfer setup shared by the backends: timeouts, user interrupts and
+// the CA bundle
 //
 // Without timeouts a stalled connection blocks forever. cloud_curl_setup()
 // installs a connect timeout, a low-speed timeout and a progress callback
@@ -164,6 +165,12 @@ void cloud_set_timeouts(long connect_timeout, long low_speed_time);
 /// Set the maximum number of retries for transient failures (< 0 keeps
 /// the current value; 0 disables retrying)
 void cloud_set_max_retries(int max_retries);
+
+/// Set the CA certificate bundle (a PEM file) used by cloud_curl_setup() to
+/// verify TLS peers, e.g., for a libcurl bundled with a Python wheel whose
+/// built-in path does not exist on this system; NULL or "" (the default)
+/// keeps the libcurl default. Returns 0 on success, -1 if out of memory.
+int cloud_set_ca_bundle(const char *path);
 
 /// Total number of retried requests since the package was loaded
 long long cloud_total_retries(void);
