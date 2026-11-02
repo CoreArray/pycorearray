@@ -8,13 +8,14 @@ whole file first: only the blocks that are actually read are fetched, using
 HTTP Range requests via libcurl, with an in-memory least-recently-used block
 cache.
 
-`gdsfile.open()` opens such a URL directly::
+`gdsfile.open()` opens such a URL directly, e.g., a public file on Amazon S3
+(the examples assume ``import pycorearray as gds``):
 
-	>>> import pycorearray as gds
-	>>> f = gds.gdsfile()
-	>>> f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')
-	>>> f.show()
-	>>> f.close()
+>>> f = gds.gdsfile()
+>>> f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')   # doctest: +SKIP
+>>> f.root().index('position').read(start=[1000], count=[5])  # doctest: +SKIP
+array([2409958, 2410723, 2410773, 2412474, 2413426], dtype=int32)
+>>> f.close()                                                 # doctest: +SKIP
 
 Credentials are resolved from, in this order, the entry configured for the
 longest matching URL prefix (``config_*(..., url=...)``), the settings of the
@@ -56,7 +57,13 @@ _AZURITE_KEY = ('Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6'
 # Opening
 
 def available():
-	"""Whether pycorearray was built with cloud access (libcurl)"""
+	"""Whether pycorearray was built with cloud access (libcurl)
+
+	Examples
+	--------
+	>>> gds.cloud.available()
+	True
+	"""
 	return cc.cloud_available()
 
 
@@ -66,6 +73,13 @@ def schemes():
 	Returns
 	-------
 	dict : URL scheme -> description
+
+	Examples
+	--------
+	>>> gds.cloud.schemes()['gs']
+	'Google Cloud Storage'
+	>>> sorted(gds.cloud.schemes())
+	['az', 'gs', 'http', 'https', 's3']
 	"""
 	return dict(_SCHEMES)
 
@@ -130,8 +144,11 @@ def open(url):
 
 	Examples
 	--------
-	>>> f = pycorearray.cloud.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')
-	>>> f.close()
+	>>> url = 's3://gds-stat/download/hapmap/hapmap_r23a.gds'   # a public file
+	>>> f = gds.cloud.open(url)                                  # doctest: +SKIP
+	>>> f.root().index('position').read(start=[1000], count=[5]) # doctest: +SKIP
+	array([2409958, 2410723, 2410773, 2412474, 2413426], dtype=int32)
+	>>> f.close()                                                # doctest: +SKIP
 	"""
 	if not isinstance(url, str):
 		raise TypeError("'url' should be a string.")
@@ -194,6 +211,12 @@ def options(connect_timeout=None, timeout=None, max_retries=None,
 	Returns
 	-------
 	dict : the options
+
+	Examples
+	--------
+	>>> opt = gds.cloud.options(timeout=120, max_retries=5)
+	>>> opt['timeout'], opt['max_retries']
+	(120.0, 5)
 	"""
 	if connect_timeout is not None:
 		_options['connect_timeout'] = _check_num(connect_timeout,
@@ -361,6 +384,11 @@ def config_http(bearer_token=None, url=None):
 		(only http:// and https://)
 
 	None keeps the current value, and '' unsets it.
+
+	Examples
+	--------
+	>>> gds.cloud.config_http(bearer_token='my-token',
+	...     url='https://data.example.org/private/')
 	"""
 	_check_token(bearer_token, 'bearer_token')
 	if url is not None and _scheme(url) not in ('http', 'https'):
@@ -402,6 +430,24 @@ def config_s3(aws_access_key_id=None, aws_secret_access_key=None, region=None,
 		e.g., 's3://my-bucket/'
 
 	None keeps the current value, and '' unsets a string.
+
+	Examples
+	--------
+	A public bucket needs no settings. The keys of a private bucket, only
+	used for the URLs under 's3://my-bucket/':
+
+	>>> gds.cloud.config_s3(aws_access_key_id='AKIA...',
+	...     aws_secret_access_key='...', region='us-west-2',
+	...     url='s3://my-bucket/')
+
+	A bucket on an S3-compatible service, e.g., MinIO:
+
+	>>> gds.cloud.config_s3(endpoint='https://minio.example.org:9000',
+	...     path_style=True, url='s3://data/')
+
+	All settings None removes the entry of a URL prefix:
+
+	>>> gds.cloud.config_s3(url='s3://data/')
 	"""
 	for v, nm in ((aws_access_key_id, 'aws_access_key_id'),
 			(aws_secret_access_key, 'aws_secret_access_key'),
@@ -448,6 +494,17 @@ def config_gcs(access_token=None, url=None):
 		e.g., 'gs://my-bucket/'
 
 	None keeps the current value, and '' unsets it.
+
+	Examples
+	--------
+	A token function, called every time a file is opened, so that the
+	token is refreshed:
+
+	>>> import subprocess
+	>>> def gcloud_token():
+	...     return subprocess.run(['gcloud', 'auth', 'print-access-token'],
+	...         capture_output=True, text=True, check=True).stdout.strip()
+	>>> gds.cloud.config_gcs(access_token=gcloud_token)
 	"""
 	_check_token(access_token, 'access_token')
 	if url is not None:

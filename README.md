@@ -55,7 +55,7 @@ Or, from a checkout, build the extension in place:
 
 ```sh
 python3 setup.py build_ext --inplace
-PYTHONPATH=. python3 tests/test_pycorearray.py   # run the test suite
+python3 -m pytest tests/   # run the tests and the examples in the docstrings
 ```
 
 

@@ -1,3 +1,29 @@
+"""Python interface to CoreArray Genomic Data Structure (GDS) files
+
+GDS files store multiple array-oriented data sets in a hierarchical structure,
+with compression and relatively efficient random access; they are portable
+across platforms, and the same files are used by the R/Bioconductor package
+gdsfmt. A GDS file is opened as a `gdsfile`, whose data sets and folders are
+`gdsnode` objects. Files on cloud storage can be opened read-only, see
+`pycorearray.cloud`.
+
+The examples in the documentation assume ``import numpy as np`` and
+``import pycorearray as gds``; the examples writing a file create 'test.gds'
+in the current directory, and remove it at the end.
+
+Examples
+--------
+>>> f = gds.gdsfile()
+>>> f.create('test.gds')
+>>> n = f.root().add('x', np.arange(5, dtype=np.int32), compress='ZIP')
+>>> n.append(np.arange(5, 10, dtype=np.int32))
+>>> n.readmode().read()
+array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=int32)
+>>> f.close()
+>>> import os
+>>> os.remove('test.gds')
+"""
+
 # import numpy
 import numpy as np
 # import os
@@ -67,7 +93,9 @@ def get_example_path(filename=None):
 
 	Examples
 	--------
-	>>> get_example_path('ceu_exon.gds')
+	>>> f = gds.gdsfile()
+	>>> f.open(gds.get_example_path('ceu_exon.gds'))
+	>>> f.close()
 	"""
 	import pycorearray
 	s = os.path.dirname(pycorearray.__file__)
@@ -132,6 +160,17 @@ def apply_gdsn(nodes, margins, fun, *args, as_is='none', **kwargs):
 	Returns
 	-------
 	None, list, or numpy array depending on 'as_is'
+
+	Examples
+	--------
+	>>> f = gds.gdsfile()
+	>>> f.open(gds.get_example_path('ceu_exon.gds'))
+	>>> chrom, pos = f.index('chromosome'), f.index('position')
+	>>> s = gds.apply_gdsn([chrom, pos], [0, 0],
+	...     lambda c, p: '%s:%d' % (c, p), as_is='list')
+	>>> s[:3]
+	['1:1105366', '1:1105411', '1:1110294']
+	>>> f.close()
 	"""
 	single = isinstance(nodes, gdsnode)
 	if single:
@@ -211,6 +250,15 @@ class gdsfile:
 		--------
 		open : open an existing GDS file
 		close: close a GDS file
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('x', np.arange(5, dtype=np.int32))
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		self.fileid = cc.create_gds(filename, allow_dup)
 		self.filename = os.path.abspath(filename)
@@ -243,11 +291,17 @@ class gdsfile:
 
 		Examples
 		--------
-		>>> fn = get_example_path('ceu_exon.gds')
 		>>> f = gds.gdsfile()
-		>>> f.open(fn)
-		>>> f.show()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.root().ls()
+		['description', 'sample.id', 'variant.id', 'position', 'chromosome',
+		 'allele', 'genotype', 'phase', 'annotation', 'sample.annotation']
 		>>> f.close()
+
+		A file on cloud storage:
+
+		>>> f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')  # doctest: +SKIP
+		>>> f.close()                                                # doctest: +SKIP
 		"""
 		if cloud._is_url(filename):
 			if not readonly:
@@ -331,6 +385,16 @@ class gdsfile:
 		Returns
 		-------
 		gdsnode
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.index('genotype/data').description()['dim']
+		[1348, 90, 2]
+		>>> f.index('genotype/xyz', silent=True) is None
+		True
+		>>> f.close()
 		"""
 		v = gdsnode()
 		v.idx, v.pid = cc.index_gds(self.fileid, path, silent)
@@ -341,9 +405,11 @@ class gdsfile:
 
 
 	def show(self, attribute=False, all=False):
-		"""Display a GDS file
+		r"""Display a GDS file
 
-		Display the structure of a GDS file.
+		Display the structure of a GDS file: a folder is shown as '[ ]', and
+		a data set as '{ }' with its data type, dimensions, compression method
+		and ratio, and stored size; '*' marks a node with attributes.
 
 		Parameters
 		----------
@@ -355,6 +421,35 @@ class gdsfile:
 		Returns
 		-------
 		None
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.show()
+		File: ...ceu_exon.gds (32.5K)
+		+    [  ] *
+		|--+ description   [  ] *
+		|--+ sample.id   { Str8 90 LZMA_ra(35.8%), 258B } *
+		|--+ variant.id   { Int32 1348 LZMA_ra(16.8%), 906B } *
+		|--+ position   { Int32 1348 LZMA_ra(64.6%), 3.4K } *
+		|--+ chromosome   { Str8 1348 LZMA_ra(4.63%), 158B } *
+		|--+ allele   { Str8 1348 LZMA_ra(16.7%), 902B } *
+		|--+ genotype   [  ] *
+		|  |--+ data   { Bit2 1348x90x2 LZMA_ra(26.3%), 15.6K } *
+		|  |--+ extra.index   { Int32 0x3 LZMA_ra, 19B } *
+		|  \--+ extra   { Int16 0 LZMA_ra, 19B }
+		|--+ phase   [  ]
+		|  |--+ data   { Bit1 1348x90 LZMA_ra(0.91%), 138B } *
+		|  |--+ extra.index   { Int32 0x3 LZMA_ra, 19B } *
+		|  \--+ extra   { Bit1 0 LZMA_ra, 19B }
+		|--+ annotation   [  ]
+		|  |--+ id   { Str8 1348 LZMA_ra(38.4%), 5.5K } *
+		|  |--+ qual   { Float32 1348 LZMA_ra(2.26%), 122B } *
+		|  \--+ filter   { Int32,factor 1348 LZMA_ra(2.26%), 122B } *
+		\--+ sample.annotation   [  ]
+		   \--+ family   { Str8 90 LZMA_ra(57.1%), 222B }
+		>>> f.close()
 		"""
 		sz = self.filesize()
 		if sz >= 1073741824:
@@ -411,6 +506,14 @@ class gdsnode:
 		Returns
 		-------
 		a list of strings
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.index('genotype').ls()
+		['data', 'extra.index', 'extra']
+		>>> f.close()
 		"""
 		return cc.ls_gdsn(self.idx, self.pid, inc_hidden)
 
@@ -504,6 +607,15 @@ class gdsnode:
 		    good: logical, indicates the state of GDS file, e.g., False if the virtual folder fails to link the target GDS file
 		    hidden: logical, True if it is a hidden node
 		    message: if applicable, messages of the GDS node, such like error messages, log information
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> d = f.index('genotype/data').description()
+		>>> d['trait'], d['dim'], d['compress']
+		('Bit2', [1348, 90, 2], 'LZMA_RA.def:256K')
+		>>> f.close()
 		"""
 		return cc.desp_gdsn(self.idx, self.pid)
 
@@ -516,6 +628,14 @@ class gdsnode:
 		Returns
 		-------
 		dictionary of attributes
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.index('annotation/filter').getattr()['R.levels']
+		['PASS', 'q10']
+		>>> f.close()
 		"""
 		return cc.getattr_gdsn(self.idx, self.pid)
 
@@ -538,6 +658,27 @@ class gdsnode:
 		Returns
 		-------
 		a numpy array object
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.index('position').read(start=[0], count=[5])
+		array([1105366, 1105411, 1110294, 3537996, 3538692], dtype=int32)
+		>>> f.index('sample.id').read(start=[0], count=[3])
+		array(['NA06984', 'NA06985', 'NA06986'], dtype=object)
+
+		The first two variants of the first three samples, all alleles:
+
+		>>> f.index('genotype/data').read(start=[0, 0, 0], count=[2, 3, -1])
+		array([[[3, 3],
+		        [3, 3],
+		        [0, 0]],
+		<BLANKLINE>
+		       [[3, 3],
+		        [3, 3],
+		        [0, 0]]], dtype=uint8)
+		>>> f.close()
 		"""
 		return cc.read_gdsn(self.idx, self.pid, start, count, cvt)
 
@@ -558,6 +699,16 @@ class gdsnode:
 		Returns
 		-------
 		a numpy array object
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> n = f.index('genotype/data')     # variant x sample x allele
+		>>> sel = [ np.arange(1348) < 10, None, np.array([True, False]) ]
+		>>> n.readex(sel).shape
+		(10, 90, 1)
+		>>> f.close()
 		"""
 		return cc.read2_gdsn(self.idx, self.pid, sel, cvt)
 
@@ -605,6 +756,25 @@ class gdsnode:
 		Returns
 		-------
 		gdsnode
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> r = f.root()
+		>>> n = r.add('int', np.arange(10, dtype=np.int32), compress='LZMA_RA')
+		>>> n = r.add('str', ['a', 'bc', 'def'])
+		>>> n.description()['storage']
+		'dStr8'
+		>>> n = r.add('real', storage='packedreal16', offset=0, scale=0.01)
+		>>> n = r.add('mat', storage='float64', valdim=[0, 3])   # empty
+		>>> n.description()['dim']
+		[0, 3]
+		>>> r.ls()
+		['int', 'str', 'real', 'mat']
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		if storage == '' or storage is None:
 			storage = _infer_storage(val) if val is not None else ''
@@ -644,6 +814,18 @@ class gdsnode:
 		Returns
 		-------
 		gdsnode
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> d = f.root().addfolder('sample')
+		>>> n = d.add('id', ['s1', 's2', 's3'])
+		>>> f.index('sample/id').read()
+		array(['s1', 's2', 's3'], dtype=object)
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		v = gdsnode()
 		v.idx, v.pid = cc.addfolder_gdsn(self.idx, self.pid, name, type, gds_fn,
@@ -662,6 +844,20 @@ class gdsnode:
 			the name of a child node to delete; if None, delete this node
 		force : bool
 			if True, also delete a non-empty folder
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> r = f.root()
+		>>> n = r.add('x', np.arange(5, dtype=np.int32))
+		>>> n = r.add('y', np.arange(5, dtype=np.int32))
+		>>> r.delete('x')       # or r.index('x').delete()
+		>>> r.ls()
+		['y']
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		if child is not None:
 			n = self.index(child)
@@ -676,10 +872,36 @@ class gdsnode:
 	def append(self, val):
 		"""Append data to an array node
 
+		The data are appended along the first dimension (numpy C-order).
+
 		Parameters
 		----------
 		val : array-like
 			a numpy array, a sequence, or a list of strings
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('x', storage='int32', valdim=[0, 3])
+		>>> for i in range(4):
+		...     n.append(np.full((1, 3), i, dtype=np.int32))
+		>>> n.read()
+		array([[0, 0, 0],
+		       [1, 1, 1],
+		       [2, 2, 2],
+		       [3, 3, 3]], dtype=int32)
+
+		A compressed node needs readmode() before reading:
+
+		>>> n = f.root().add('z', storage='int32', compress='ZIP')
+		>>> n.append(np.arange(3, dtype=np.int32))
+		>>> n.append(np.arange(3, dtype=np.int32))
+		>>> n.readmode().read()
+		array([0, 1, 2, 0, 1, 2], dtype=int32)
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		obj, _dim, _is_str = _prepare_value(val)
 		cc.append_gdsn(self.idx, self.pid, obj)
@@ -699,6 +921,21 @@ class gdsnode:
 			0-based starting position for each dimension
 		count : a list of ints, optional
 			the length along each dimension
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('m', np.zeros((3, 4), dtype=np.int32))
+		>>> n.write(np.array([[1, 2], [3, 4]], dtype=np.int32),
+		...     start=[1, 1], count=[2, 2])
+		>>> n.read()
+		array([[0, 0, 0, 0],
+		       [0, 1, 2, 0],
+		       [0, 3, 4, 0]], dtype=int32)
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		obj, dim, _is_str = _prepare_value(val)
 		if start is None and count is None:
@@ -719,6 +956,19 @@ class gdsnode:
 			the new dimensions
 		permute : bool
 			if True, permute the data when reshaping
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('x', np.arange(6, dtype=np.int32))
+		>>> n.setdim([2, 3])
+		>>> n.read()
+		array([[0, 1, 2],
+		       [3, 4, 5]], dtype=int32)
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		cc.setdim_gdsn(self.idx, self.pid, [int(d) for d in dim], bool(permute))
 
@@ -734,6 +984,26 @@ class gdsnode:
 		Returns
 		-------
 		gdsnode (self)
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('x', np.arange(5, dtype=np.int32))
+		>>> n.compression('ZIP').readmode().description()['compress']
+		'ZIP.def'
+
+		Appending to a node whose compression is closed (closezip=True)
+		needs it decompressed first:
+
+		>>> n = f.root().add('y', np.arange(5, dtype=np.int32),
+		...     compress='ZIP', closezip=True)
+		>>> n.compression('').append(np.arange(5, 8, dtype=np.int32))
+		>>> n.read()
+		array([0, 1, 2, 3, 4, 5, 6, 7], dtype=int32)
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		cc.compression_gdsn(self.idx, self.pid, compress)
 		return self
@@ -742,9 +1012,24 @@ class gdsnode:
 	def readmode(self):
 		"""Close the compression and switch to read mode
 
+		A compressed node stays open for appending after add() (closezip=False,
+		as in R), and readmode() should be called before reading it.
+
 		Returns
 		-------
 		gdsnode (self)
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('x', np.arange(5, dtype=np.int32), compress='ZIP')
+		>>> n.append(np.arange(5, 8, dtype=np.int32))
+		>>> n.readmode().read()
+		array([0, 1, 2, 3, 4, 5, 6, 7], dtype=int32)
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		cc.readmode_gdsn(self.idx, self.pid)
 		return self
@@ -759,6 +1044,19 @@ class gdsnode:
 			the attribute name
 		val : int, float, bool, str, or a list of these
 			the attribute value
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.create('test.gds')
+		>>> n = f.root().add('position', np.arange(5, dtype=np.int32))
+		>>> n.putattr('unit', 'bp')
+		>>> n.putattr('tags', [1, 2, 3])
+		>>> n.getattr()
+		{'unit': 'bp', 'tags': [1, 2, 3]}
+		>>> f.close()
+		>>> import os
+		>>> os.remove('test.gds')
 		"""
 		cc.putattr_gdsn(self.idx, self.pid, name, val)
 
@@ -785,6 +1083,14 @@ class gdsnode:
 		Returns
 		-------
 		bool
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.root().exist('genotype/data'), f.root().exist('genotype/xyz')
+		(True, False)
+		>>> f.close()
 		"""
 		return cc.exist_gdsn(self.idx, self.pid, path)
 
@@ -919,6 +1225,17 @@ class gdsnode:
 		Returns
 		-------
 		None, list, or numpy array depending on 'as_is'
+
+		Examples
+		--------
+		The number of reference alleles (coded as 0) of the first variants:
+
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> n = f.index('genotype/data')     # variant x sample x allele
+		>>> n.apply(0, lambda g: int((g == 0).sum()), as_is='unlist')[:5]
+		array([110, 105, 148,  18, 165])
+		>>> f.close()
 		"""
 		return apply_gdsn(self, margin, fun, *args, as_is=as_is, **kwargs)
 
@@ -926,9 +1243,12 @@ class gdsnode:
 	def digest(self, algorithm='md5'):
 		"""Compute a hash digest of this node's data
 
-		The digest is computed over the raw element bytes in storage order
-		(little-endian for numeric data; UTF-8 for strings). For plain numeric
-		arrays this matches R gdsfmt's ``digest.gdsn``.
+		The digest is computed over the bytes of the data as read by read(),
+		in storage order (little-endian for numeric data; UTF-8 for strings).
+		For 32-bit integers, integers of up to 8 bits and 64-bit floating
+		numbers, it is the same as ``digest.gdsn(node, action="Robject")`` of
+		R gdsfmt (not the default action, which digests the stored, possibly
+		compressed, bytes).
 
 		Parameters
 		----------
@@ -938,6 +1258,14 @@ class gdsnode:
 		Returns
 		-------
 		str : the hex digest
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.index('position').digest()
+		'3149ab9bd8ae18ba8b33e61deedeb204'
+		>>> f.close()
 		"""
 		import hashlib
 		data = self.read()
@@ -958,6 +1286,15 @@ class gdsnode:
 		Returns
 		-------
 		dict : for numeric data {min, max, mean, num_na, n}; otherwise {n}
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> s = f.index('position').summarize()
+		>>> s['min'], s['max'], s['num_na'], s['n']
+		(610217.0, 237954571.0, 0, 1348)
+		>>> f.close()
 		"""
 		d = self.description()
 		data = self.read()
@@ -976,9 +1313,9 @@ class gdsnode:
 
 
 	def show(self, attribute=False, all=False, expand=True):
-		"""Display a GDS node
+		r"""Display a GDS node
 
-		Display the structure of a GDS node.
+		Display the structure of a GDS node, see gdsfile.show().
 
 		Parameters
 		----------
@@ -986,10 +1323,23 @@ class gdsnode:
 			if True, show the attribute(s)
 		all : bool
 			if False, hide GDS nodes with an attribute "R.invisible"
+		expand : bool
+			if True, show the nodes in a folder
 
 		Returns
 		-------
 		None
+
+		Examples
+		--------
+		>>> f = gds.gdsfile()
+		>>> f.open(gds.get_example_path('ceu_exon.gds'))
+		>>> f.index('genotype').show()
+		+ genotype   [  ] *
+		|--+ data   { Bit2 1348x90x2 LZMA_ra(26.3%), 15.6K } *
+		|--+ extra.index   { Int32 0x3 LZMA_ra, 19B } *
+		\--+ extra   { Int16 0 LZMA_ra, 19B }
+		>>> f.close()
 		"""
 
 		def enum(node, prefix, fullname, last, attr, expand):
