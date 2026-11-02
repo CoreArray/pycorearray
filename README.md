@@ -73,18 +73,21 @@ Zheng X, Gogarten S, Lawrence M, Stilp A, Conomos M, Weir BS, Laurie C, Levine D
 
 ## Examples
 
+### Open an existing file
+
+`gdsfile.open()` opens a file read-only by default. An example file comes
+with the package:
+
 ```python
 import pycorearray as gds
 
-fn = gds.get_example_path('ceu_exon.gds')
 f = gds.gdsfile()
-f.open(fn)
+f.open(gds.get_example_path('ceu_exon.gds'))
 f.show()
-f.close()
 ```
 
 ```
-File: pycorearray/data/ceu_exon.gds (32.5K)
+File: /.../pycorearray/data/ceu_exon.gds (32.5K)
 +    [  ] *
 |--+ description   [  ] *
 |--+ sample.id   { Str8 90 LZMA_ra(35.8%), 258B } *
@@ -108,6 +111,31 @@ File: pycorearray/data/ceu_exon.gds (32.5K)
    \--+ family   { Str8 90 LZMA_ra(57.1%), 222B }
 ```
 
+```python
+f.index('sample.id').read(start=[0], count=[3])
+## array(['NA06984', 'NA06985', 'NA06986'], dtype=object)
+f.index('position').read(start=[0], count=[5])
+## array([1105366, 1105411, 1110294, 3537996, 3538692], dtype=int32)
+g = f.index('genotype/data').read()   # variant x sample x allele
+g.shape
+## (1348, 90, 2)
+f.close()
+```
+
+### Open a file on cloud storage
+
+```python
+f = gds.gdsfile()
+f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')   # a public file, 86.5M
+f.index('position').read(start=[1000], count=[5])
+## array([2409958, 2410723, 2410773, 2412474, 2413426], dtype=int32)
+f.close()
+```
+
+Only the blocks that are read are downloaded: opening this file and reading
+these values fetch a few 1 MB blocks, not the whole file. See
+[Cloud Storage](#cloud-storage) for the supported services and credentials.
+
 
 
 ## Cloud Storage
@@ -116,19 +144,10 @@ File: pycorearray/data/ceu_exon.gds (32.5K)
 `http://` and `https://` URLs, Amazon S3 (`s3://bucket/key`, and S3-compatible
 services such as MinIO, Ceph, Cloudflare R2, Wasabi or Backblaze B2 via a
 custom endpoint), Google Cloud Storage (`gs://bucket/key`) and Azure Blob
-Storage (`az://container/blob`). Only the blocks that are actually read are
-fetched, using HTTP Range requests with an in-memory block cache, so random
-access to a remote file works like access to a local one.
-
-```python
-import pycorearray as gds
-
-f = gds.gdsfile()
-f.open('s3://gds-stat/download/hapmap/hapmap_r23a.gds')   # a public file
-f.root().index('position').read(start=[1000], count=[5])
-## array([2409958, 2410723, 2410773, 2412474, 2413426], dtype=int32)
-f.close()
-```
+Storage (`az://container/blob`), as in the example above. Only the blocks that
+are actually read are fetched, using HTTP Range requests with an in-memory
+block cache, so random access to a remote file works like access to a local
+one.
 
 Credentials are taken from, in this order, the settings for the longest
 matching URL prefix, the settings of the session, and the usual environment
