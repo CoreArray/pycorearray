@@ -84,3 +84,26 @@ jobs:
 
       - name: Read a file over HTTPS
         run: /tmp/venv/bin/python tools/wheels/check_https.py
+
+  # a tag like v0.2.0rc1 goes to TestPyPI, and a final tag like v0.2.0 to PyPI
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [wheels, sdist, https]
+    runs-on: ubuntu-latest
+    environment: ${{ contains(github.ref_name, 'rc') && 'testpypi' || 'pypi' }}
+    # for Trusted Publishing
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      # a version can not be uploaded twice
+      - name: Check that the tag is the version of the package
+        run: test -f "dist/pycorearray-${GITHUB_REF_NAME#v}.tar.gz"
+
+      - uses: pypa/gh-action-pypi-publish@v1.14.3
+        with:
+          repository-url: ${{ contains(github.ref_name, 'rc') && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}
