@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pycorearray"
-version = "0.2.0rc1"
+version = "0.2.0"
 description = "Python Interface to CoreArray Genomic Data Structure (GDS) Files"
 readme = "README.md"
 requires-python = ">=3.10"
