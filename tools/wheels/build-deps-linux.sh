@@ -17,6 +17,7 @@ CURL_SHA256=e3de77cfa6367083c776a26647fc9f633b538c06c3baa73d931a252ac8f72b49
 
 PREFIX=/usr/local
 NPROC=$(nproc)
+PROJECT=$PWD
 
 # the CFLAGS of the wheels (pyproject.toml) would replace the default flags of
 # OpenSSL, including -O3
@@ -61,3 +62,14 @@ cd ..
 ldconfig
 curl-config --version
 curl-config --protocols
+
+# the licenses of the libraries that auditwheel copies into the wheels; only
+# the copy of the project in this container is changed
+{
+	printf '\n\n=== Libraries bundled in the Linux wheels ===\n'
+	printf '\nliblzma (from xz): public domain\n'
+	printf '\nOpenSSL %s:\n\n' $OPENSSL_VERSION
+	cat openssl-$OPENSSL_VERSION/LICENSE.txt
+	printf '\nlibcurl %s:\n\n' $CURL_VERSION
+	cat curl-$CURL_VERSION/COPYING
+} >> "$PROJECT/LICENSE"

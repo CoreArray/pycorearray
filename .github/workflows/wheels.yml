@@ -27,6 +27,16 @@ jobs:
 
       - uses: pypa/cibuildwheel@v4.3.5
 
+      - name: Check the licenses of the libraries in the Linux wheels
+        if: runner.os == 'Linux'
+        run: |
+          for whl in wheelhouse/*.whl; do
+            python3 -m zipfile -e "$whl" /tmp/whl
+            grep -q 'Apache License' /tmp/whl/*.dist-info/licenses/LICENSE
+            grep -q 'Daniel Stenberg' /tmp/whl/*.dist-info/licenses/LICENSE
+            rm -rf /tmp/whl
+          done
+
       - uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.os }}

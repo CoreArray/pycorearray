@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pycorearray"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python Interface to CoreArray Genomic Data Structure (GDS) Files"
 readme = "README.md"
 requires-python = ">=3.10"
-# pycorearray: GPL-3.0; bundled CoreArray: LGPL-3.0; LZ4/xxHash: BSD-2-Clause; zlib: Zlib
-license = "GPL-3.0-only AND LGPL-3.0-only AND BSD-2-Clause AND Zlib"
-license-files = ["LICENSE", "src/CoreArray/LICENSE", "src/LZ4/LICENSE", "src/ZLIB/LICENSE"]
+# pycorearray and the bundled CoreArray: LGPL-3.0; LZ4/xxHash: BSD-2-Clause; zlib: Zlib
+license = "LGPL-3.0-only AND BSD-2-Clause AND Zlib"
+license-files = ["LICENSE", "LICENSE.GPL-3", "src/CoreArray/LICENSE", "src/LZ4/LICENSE", "src/ZLIB/LICENSE"]
 authors = [
     { name = "Xiuwen Zheng", email = "zhengxwen@gmail.com" },
 ]

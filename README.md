@@ -3,10 +3,10 @@ pycorearray: Python Interface to CoreArray Genomic Data Structure (GDS) Files
 
 [![CI](https://github.com/CoreArray/pycorearray/actions/workflows/ci.yml/badge.svg)](https://github.com/CoreArray/pycorearray/actions/workflows/ci.yml)
 
-![GPLv3](http://www.gnu.org/graphics/gplv3-88x31.png)
-[GNU General Public License, GPLv3](http://www.gnu.org/copyleft/gpl.html)
+![LGPLv3](http://www.gnu.org/graphics/lgplv3-88x31.png)
+[GNU Lesser General Public License, LGPL-3](https://www.gnu.org/licenses/lgpl.html)
 
-pre-release version: v0.2, renamed from `pygds` in Oct 2026 (v0.1 was `pygds`, from 2017)
+v0.2, renamed from `pygds` in Oct 2026 (v0.1 was `pygds`, from 2017)
 
 
 ## Features
