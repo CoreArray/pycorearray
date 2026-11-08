@@ -174,9 +174,3 @@ f.close()
 
 Credentials for private files are taken from the usual environment variables
 of each service, or set with `pycorearray.cloud`; see `help(pycorearray.cloud)`.
-
-
-
-## Also See
-
-[PySeqArray](https://github.com/CoreArray/PySeqArray): data manipulation of whole-genome sequencing variants in Python
