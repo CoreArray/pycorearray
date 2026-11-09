@@ -15,8 +15,8 @@ license-files = ["LICENSE", "LICENSE.GPL-3", "src/CoreArray/LICENSE", "src/LZ4/L
 authors = [
     { name = "Xiuwen Zheng", email = "zhengxwen@gmail.com" },
 ]
-keywords = ["GDS", "CoreArray", "gdsfmt", "genomics", "bioinformatics",
-    "array storage", "compression"]
+keywords = ["GDS", "CoreArray", "gdsfmt", "genomics", "genetics", "bioinformatics",
+    "WGS", "WES"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
